@@ -1,0 +1,77 @@
+name: Bootstrap project structure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create project structure
+        run: |
+          mkdir -p \
+            frontend/src \
+            frontend/public \
+            backend/app/api \
+            backend/app/domain \
+            backend/app/data \
+            backend/app/services \
+            backend/app/adapters \
+            backend/app/shared \
+            database/migrations \
+            database/seed \
+            automation/workflows \
+            automation/prompts \
+            automation/contracts \
+            evals/datasets \
+            evals/results \
+            tests \
+            docs
+
+          touch \
+            frontend/README.md \
+            frontend/src/.gitkeep \
+            frontend/public/.gitkeep \
+            backend/README.md \
+            backend/app/__init__.py \
+            backend/app/api/__init__.py \
+            backend/app/domain/__init__.py \
+            backend/app/data/__init__.py \
+            backend/app/services/__init__.py \
+            backend/app/adapters/__init__.py \
+            backend/app/shared/__init__.py \
+            database/README.md \
+            database/migrations/.gitkeep \
+            database/seed/.gitkeep \
+            automation/README.md \
+            automation/workflows/.gitkeep \
+            automation/prompts/.gitkeep \
+            automation/contracts/.gitkeep \
+            evals/README.md \
+            evals/datasets/.gitkeep \
+            evals/results/.gitkeep \
+            tests/README.md \
+            docs/README.md \
+            .env.example \
+            CONTRIBUTING.md
+
+      - name: Commit generated structure
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "Project structure already exists."
+            exit 0
+          fi
+
+          git commit -m "chore: initialize cloud project structure"
+          git push
