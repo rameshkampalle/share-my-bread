@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
+    supabase_publishable_key: str | None = None
     supabase_service_role_key: str | None = None
     cors_allowed_origins: str = ""
     n8n_agent_webhook_url: str | None = None

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { AssistantResponse, InventoryRow, Product } from "@/lib/types";
+import type { AssistantResponse, Cart, InventoryRow, Product } from "@/lib/types";
 
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
@@ -35,6 +35,8 @@ export function Storefront() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productError, setProductError] = useState("");
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [cartError, setCartError] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -43,6 +45,20 @@ export function Storefront() {
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
   const [decision, setDecision] = useState<"accepted" | "declined" | null>(null);
+
+  async function backend(path: string, init?: RequestInit) {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
+    const { data } = await getSupabaseBrowserClient().auth.getSession();
+    if (!data.session) throw new Error("Your session has expired.");
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", authorization: `Bearer ${data.session.access_token}`, ...(init?.headers ?? {}) },
+    });
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.detail ?? value.message ?? "Backend request failed.");
+    return value;
+  }
 
   useEffect(() => {
     let supabase;
@@ -89,6 +105,10 @@ export function Storefront() {
     }
 
     void loadProducts();
+    setCartError("");
+    void backend("/api/cart/current")
+      .then((value) => setCart(value))
+      .catch((error) => setCartError(error instanceof Error ? error.message : "Cart unavailable."));
   }, [session]);
 
   const categories = useMemo(
@@ -148,6 +168,25 @@ export function Storefront() {
     }
   }
 
+  async function confirmProposal() {
+    if (!assistantResult?.proposal || !cart) return;
+    setAsking(true);
+    setAssistantError("");
+    try {
+      const value = await backend("/api/cart/confirm", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ cycleId: cart.cycle_id, correlationId: assistantResult.correlationId, sourceText: assistantQuery, proposal: assistantResult.proposal }),
+      });
+      setCart(value.cart);
+      setDecision("accepted");
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : "Proposal confirmation failed.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
   if (!authReady) {
     return <main className="center-stage"><div className="loader" aria-label="Loading" /></main>;
   }
@@ -191,6 +230,7 @@ export function Storefront() {
         <div className="member-menu">
           <span className="avatar">{session.user.email?.charAt(0).toUpperCase()}</span>
           <div><strong>{session.user.user_metadata.display_name ?? "Demo member"}</strong><small>{session.user.email}</small></div>
+          <button className="cart-pill" onClick={() => document.getElementById("cart")?.scrollIntoView()}>{cart?.lines.length ?? 0} cart items · {money.format(cart?.subtotal ?? 0)}</button>
           <button onClick={() => getSupabaseBrowserClient().auth.signOut()}>Sign out</button>
         </div>
       </header>
@@ -202,6 +242,14 @@ export function Storefront() {
           <p>Thirty pantry essentials, one transparent inventory, and a smarter way to shop together.</p>
         </div>
         <button className="assistant-button" onClick={() => setAssistantOpen(true)}><span>✦</span> Ask the shopping assistant</button>
+      </section>
+
+      <section className="cart-strip" id="cart">
+        <div><p className="eyebrow ink">Current shared order</p><h2>{cart?.group_name ?? "Your cart"}</h2></div>
+        {cartError ? <p className="cart-error">{cartError}</p> : cart?.lines.length ? (
+          <div className="cart-lines">{cart.lines.map((line) => <span key={line.id}><strong>{line.quantity}×</strong> {line.name}</span>)}</div>
+        ) : <p className="empty-cart">Your cart is empty. Ask the assistant to prepare something.</p>}
+        <strong className="cart-total">{money.format(cart?.subtotal ?? 0)}</strong>
       </section>
 
       <section className="catalogue" id="inventory">
@@ -255,13 +303,14 @@ export function Storefront() {
               <div className="assistant-response">
                 <span className="response-type">{assistantResult.responseType.replaceAll("_", " ")}</span>
                 <p>{assistantResult.message}</p>
+                {assistantResult.proposal?.items && <ul className="proposal-items">{assistantResult.proposal.items.map((item) => <li key={item.productId}><strong>{item.quantity}×</strong> {item.name}</li>)}</ul>}
                 {assistantResult.requiresConfirmation && assistantResult.proposal && !decision && (
                   <div className="proposal-actions">
-                    <button className="primary-button" onClick={() => setDecision("accepted")}>Confirm proposal</button>
+                    <button className="primary-button" disabled={asking || !cart} onClick={confirmProposal}>{asking ? "Saving…" : "Confirm proposal"}</button>
                     <button className="secondary-button" onClick={() => setDecision("declined")}>Not now</button>
                   </div>
                 )}
-                {decision === "accepted" && <p className="decision-note">Proposal approved in the UI. Cart mutation will be connected through the deterministic backend in the next stage.</p>}
+                {decision === "accepted" && <p className="decision-note">Confirmed and saved to your cart.</p>}
                 {decision === "declined" && <p className="decision-note">No changes made.</p>}
                 <small>Correlation: {assistantResult.correlationId}</small>
               </div>

@@ -16,6 +16,7 @@ Set these values in `.env.local`:
 
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL.
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Supabase publishable key. Do not use the secret/service-role key.
+- `NEXT_PUBLIC_API_BASE_URL`: FastAPI URL (`http://localhost:8000` for local development).
 - `N8N_AGENT_WEBHOOK_URL`: production URL from the published `SMB-AGT-001-Assistant` workflow.
 - `N8N_WEBHOOK_SECRET`: optional shared secret if the n8n workflow validates it.
 
@@ -28,7 +29,8 @@ npm run lint
 npm run build
 ```
 
-Expected after sign-in: 30 products, inventory stock indicators, alias search (for example `curd`), and category filters.
+Run the FastAPI backend separately before testing cart confirmation. Expected after sign-in:
+30 products, inventory stock indicators, alias search, category filters, and the current cart.
 
 ## Vercel deployment
 
@@ -39,4 +41,4 @@ Expected after sign-in: 30 products, inventory stock indicators, alias search (f
 
 ## Current safety boundary
 
-The assistant can search and return a cart proposal. Confirmation is displayed but deliberately does not mutate the cart yet. That write must be wired to the deterministic FastAPI backend, never directly to n8n or the browser.
+The assistant searches and proposes. Only the authenticated FastAPI endpoint validates stock and writes confirmed items to the cart in one database transaction.

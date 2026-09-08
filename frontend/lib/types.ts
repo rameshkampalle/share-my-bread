@@ -21,10 +21,17 @@ export type Product = {
 };
 
 export type Proposal = {
-  action: "ADD_ITEM" | "MERGE_ITEMS" | "SUBSTITUTE_ITEM";
-  productId: string;
-  quantity: number;
-  replacesProductId?: string | null;
+  action: "ADD_ITEMS";
+  items: Array<{ productId: string; name: string; quantity: number }>;
+};
+
+export type Cart = {
+  cycle_id: string;
+  cutoff_at: string;
+  group_name: string;
+  currency: string;
+  subtotal: number;
+  lines: Array<{ id: string; product_id: string; name: string; sku: string; unit: string; quantity: number; unit_price: number; line_total: number }>;
 };
 
 export type AssistantResponse = {

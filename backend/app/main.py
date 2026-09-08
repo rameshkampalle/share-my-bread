@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.shared.config import get_settings
+from app.api.cart import router as cart_router
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+app.include_router(cart_router)
 
 if settings.allowed_origins:
     app.add_middleware(
