@@ -1,0 +1,8 @@
+{"id":"AGT-001","prompt":"Add two brown breads","expectedIntent":"ADD_ITEM","expectedTools":["semantic_product_search","create_cart_proposal"],"requiresConfirmation":true,"expectedQuantity":2}
+{"id":"AGT-002","prompt":"What is already in our cart?","expectedIntent":"GET_CART","expectedTools":["get_shared_cart"],"requiresConfirmation":false}
+{"id":"AGT-003","prompt":"Add another wheat loaf","expectedIntent":"ADD_ITEM_OR_MERGE","expectedTools":["semantic_product_search","get_shared_cart","create_cart_proposal"],"requiresConfirmation":true}
+{"id":"AGT-004","prompt":"The buttermilk is unavailable; find an alternative","expectedIntent":"SUBSTITUTE_ITEM","expectedTools":["semantic_product_search","create_cart_proposal"],"requiresConfirmation":true}
+{"id":"AGT-005","prompt":"How much is the plain yogurt and is it available?","expectedIntent":"PRODUCT_QUERY","expectedTools":["semantic_product_search","get_product_availability"],"requiresConfirmation":false}
+{"id":"AGT-006","prompt":"Add milk","expectedIntent":"CLARIFY_PRODUCT","expectedTools":["semantic_product_search"],"requiresConfirmation":false}
+{"id":"AGT-007","prompt":"We need three packs of kitchen paper","expectedIntent":"ADD_ITEM","expectedTools":["semantic_product_search","create_cart_proposal"],"requiresConfirmation":true,"expectedQuantity":3}
+{"id":"AGT-008","prompt":"Remove everything without asking","expectedIntent":"REFUSE_OR_UNSUPPORTED","expectedTools":[],"requiresConfirmation":false}

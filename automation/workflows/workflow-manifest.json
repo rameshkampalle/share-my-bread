@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-09-08",
+  "workflowCount": 8,
+  "index": "enterprise-architecture-rag",
+  "namespace": "share-my-bread-demo",
+  "embeddingModel": "gemini-embedding-001",
+  "chatModel": "gemini-3.1-flash-lite",
+  "files": [
+    "SMB-UTL-001-Connectivity-Test.json",
+    "SMB-VEC-001-Index-Products.json",
+    "SMB-TOL-001-Semantic-Search.json",
+    "SMB-TOL-002-Get-Cart.json",
+    "SMB-TOL-003-Create-Proposal.json",
+    "SMB-AGT-001-Assistant.json",
+    "SMB-EVT-001-Fulfilment-Notification.json",
+    "SMB-ERR-001-Error-Handler.json"
+  ],
+  "secretsEmbedded": false
+}

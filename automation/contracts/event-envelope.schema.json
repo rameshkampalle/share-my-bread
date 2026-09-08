@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://share-my-bread.example/schemas/event-envelope.schema.json",
+  "title": "Share My Bread Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "eventType", "correlationId", "timestamp", "actor", "data"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventType": { "type": "string", "minLength": 3, "maxLength": 100 },
+    "correlationId": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["userId"],
+      "properties": {
+        "userId": { "type": "string", "format": "uuid" },
+        "groupId": { "type": ["string", "null"], "format": "uuid" },
+        "role": { "type": "string", "enum": ["MEMBER", "COORDINATOR", "ADMIN", "SYSTEM"] }
+      }
+    },
+    "data": { "type": "object" }
+  }
+}

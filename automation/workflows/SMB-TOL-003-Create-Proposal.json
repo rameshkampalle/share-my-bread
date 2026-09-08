@@ -1,0 +1,186 @@
+{
+  "name": "SMB-TOL-003-Create-Proposal",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smb-create-proposal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "50000000-0000-4000-8000-000000000001",
+      "name": "Create Proposal Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -700,
+        0
+      ],
+      "webhookId": "50000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body ?? $json;\nif (!body || typeof body !== 'object') throw new Error('A JSON request body is required');\nconst uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n  const r = Math.floor(Math.random() * 16);\n  return (c === 'x' ? r : (r & 3) | 8).toString(16);\n});\nconst requiredUuid = ['cycleId','userId','productId'];\nfor (const key of requiredUuid) if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(body[key] ?? ''))) throw new Error(key + ' must be a UUID');\nconst action = String(body.action ?? 'ADD_ITEM');\nif (!['ADD_ITEM','MERGE_ITEMS','SUBSTITUTE_ITEM'].includes(action)) throw new Error('Unsupported proposal action');\nconst quantity = Number(body.quantity ?? 1);\nif (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new Error('quantity must be 1-99');\nreturn [{ json: { correlationId: body.correlationId || uuid(), idempotencyKey: body.idempotencyKey || uuid(), cycleId: body.cycleId, userId: body.userId, action, payload: { productId: body.productId, quantity, replacesProductId: body.replacesProductId || null }, expiresAt: body.expiresAt || null } }];"
+      },
+      "id": "50000000-0000-4000-8000-000000000002",
+      "name": "Validate Proposal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -430,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "agent_proposals",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $json.correlationId }}"
+            },
+            {
+              "fieldId": "idempotency_key",
+              "fieldValue": "={{ $json.idempotencyKey }}"
+            },
+            {
+              "fieldId": "cycle_id",
+              "fieldValue": "={{ $json.cycleId }}"
+            },
+            {
+              "fieldId": "user_id",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "={{ $json.action }}"
+            },
+            {
+              "fieldId": "payload",
+              "fieldValue": "={{ $json.payload }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING"
+            },
+            {
+              "fieldId": "expires_at",
+              "fieldValue": "={{ $json.expiresAt }}"
+            }
+          ]
+        }
+      },
+      "id": "50000000-0000-4000-8000-000000000003",
+      "name": "Persist Pending Proposal",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(i => ({ json: { responseType: 'CART_PROPOSAL', message: 'Proposal created. Confirm it in the application before any cart change.', requiresConfirmation: true, proposal: i.json } }));"
+      },
+      "id": "50000000-0000-4000-8000-000000000004",
+      "name": "Require Confirmation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "50000000-0000-4000-8000-000000000005",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Safety boundary\nThis inserts only a `PENDING` proposal. It never changes cart lines, reservations, orders, payments, or fulfilment state.",
+        "width": 540,
+        "height": 220,
+        "color": 5
+      },
+      "id": "50000000-0000-4000-8000-000000000006",
+      "name": "Note 006",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Create Proposal Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Proposal": {
+      "main": [
+        [
+          {
+            "node": "Persist Pending Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Pending Proposal": {
+      "main": [
+        [
+          {
+            "node": "Require Confirmation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require Confirmation Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://share-my-bread.example/schemas/agent-response.schema.json",
+  "title": "Share My Bread Agent Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["responseType", "message", "requiresConfirmation", "correlationId"],
+  "properties": {
+    "responseType": {
+      "type": "string",
+      "enum": ["ANSWER", "CLARIFICATION", "CART_PROPOSAL", "NO_MATCH", "REFUSAL", "ERROR"]
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 800 },
+    "requiresConfirmation": { "type": "boolean" },
+    "correlationId": { "type": "string", "format": "uuid" },
+    "proposal": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["action", "productId", "quantity"],
+      "properties": {
+        "action": { "type": "string", "enum": ["ADD_ITEM", "MERGE_ITEMS", "SUBSTITUTE_ITEM"] },
+        "productId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer", "minimum": 1, "maximum": 99 },
+        "replacesProductId": { "type": ["string", "null"], "format": "uuid" }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["productId", "name"],
+        "properties": {
+          "productId": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "similarityScore": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  }
+}

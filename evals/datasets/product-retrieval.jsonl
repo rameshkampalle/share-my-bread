@@ -1,0 +1,20 @@
+{"id":"RET-001","query":"curd","expectedProductIds":["10000000-0000-0000-0000-000000000001"],"expectNoMatch":false,"category":"known_alias"}
+{"id":"RET-002","query":"dahi for raita","expectedProductIds":["10000000-0000-0000-0000-000000000001"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-003","query":"thick curd","expectedProductIds":["10000000-0000-0000-0000-000000000002","10000000-0000-0000-0000-000000000001"],"expectNoMatch":false,"category":"ambiguous"}
+{"id":"RET-004","query":"brown bread","expectedProductIds":["10000000-0000-0000-0000-000000000007"],"expectNoMatch":false,"category":"synonym"}
+{"id":"RET-005","query":"seeded loaf","expectedProductIds":["10000000-0000-0000-0000-000000000009"],"expectNoMatch":false,"category":"semantic"}
+{"id":"RET-006","query":"brinjal","expectedProductIds":["10000000-0000-0000-0000-000000000011"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-007","query":"aubergine for curry","expectedProductIds":["10000000-0000-0000-0000-000000000011"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-008","query":"capsicum","expectedProductIds":["10000000-0000-0000-0000-000000000012"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-009","query":"coriander leaves","expectedProductIds":["10000000-0000-0000-0000-000000000013"],"expectNoMatch":false,"category":"synonym"}
+{"id":"RET-010","query":"courgette","expectedProductIds":["10000000-0000-0000-0000-000000000014"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-011","query":"chana","expectedProductIds":["10000000-0000-0000-0000-000000000017"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-012","query":"masoor dal","expectedProductIds":["10000000-0000-0000-0000-000000000019"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-013","query":"rajma","expectedProductIds":["10000000-0000-0000-0000-000000000020"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-014","query":"plain flour","expectedProductIds":["10000000-0000-0000-0000-000000000021"],"expectNoMatch":false,"category":"synonym"}
+{"id":"RET-015","query":"atta for chapati","expectedProductIds":["10000000-0000-0000-0000-000000000022"],"expectNoMatch":false,"category":"use_case"}
+{"id":"RET-016","query":"plant drink for coffee","expectedProductIds":["10000000-0000-0000-0000-000000000026"],"expectNoMatch":false,"category":"semantic"}
+{"id":"RET-017","query":"groundnuts","expectedProductIds":["10000000-0000-0000-0000-000000000028"],"expectNoMatch":false,"category":"regional_alias"}
+{"id":"RET-018","query":"washing up liquid","expectedProductIds":["10000000-0000-0000-0000-000000000029"],"expectNoMatch":false,"category":"synonym"}
+{"id":"RET-019","query":"something to wipe kitchen spills","expectedProductIds":["10000000-0000-0000-0000-000000000030"],"expectNoMatch":false,"category":"use_case"}
+{"id":"RET-020","query":"laptop charger","expectedProductIds":[],"expectNoMatch":true,"category":"negative"}

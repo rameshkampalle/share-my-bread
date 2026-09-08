@@ -1,0 +1,166 @@
+{
+  "name": "SMB-TOL-002-Get-Cart",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smb-get-cart",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "40000000-0000-4000-8000-000000000001",
+      "name": "Get Cart Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -700,
+        0
+      ],
+      "webhookId": "40000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body ?? $json;\nif (!body || typeof body !== 'object') throw new Error('A JSON request body is required');\nconst cycleId = String(body.cycleId ?? '').trim();\nif (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(cycleId)) throw new Error('A valid cycleId UUID is required');\nreturn [{ json: { cycleId } }];"
+      },
+      "id": "40000000-0000-4000-8000-000000000002",
+      "name": "Validate Cart Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -430,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "cart_lines",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cycle_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.cycleId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "ACTIVE"
+            }
+          ]
+        }
+      },
+      "id": "40000000-0000-4000-8000-000000000003",
+      "name": "Get Active Cart Lines",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const lines = $input.all().map(i => i.json); const total = lines.reduce((s,l) => s + Number(l.quantity) * Number(l.unit_price_snapshot), 0); return [{ json: { lines, lineCount: lines.length, subtotal: Number(total.toFixed(2)), currency: 'EUR' } }];"
+      },
+      "id": "40000000-0000-4000-8000-000000000004",
+      "name": "Build Cart Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        210,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "40000000-0000-4000-8000-000000000005",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Read-only tool\nInput: `{ \"cycleId\": \"uuid\" }`\nReturns active cart lines and a calculated display subtotal. The backend remains authoritative.",
+        "width": 520,
+        "height": 220,
+        "color": 5
+      },
+      "id": "40000000-0000-4000-8000-000000000006",
+      "name": "Note 006",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Cart Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Cart Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Cart Request": {
+      "main": [
+        [
+          {
+            "node": "Get Active Cart Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Cart Lines": {
+      "main": [
+        [
+          {
+            "node": "Build Cart Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Cart Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,15 @@
+{
+  "eventId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "eventType": "agent.message.received",
+  "correlationId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "timestamp": "2026-09-08T12:00:00Z",
+  "actor": {
+    "userId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "groupId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    "role": "MEMBER"
+  },
+  "data": {
+    "cycleId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    "message": "Add two tubs of curd for raita"
+  }
+}

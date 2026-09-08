@@ -1,0 +1,126 @@
+{
+  "name": "SMB-EVT-001-Fulfilment-Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smb-fulfilment-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "70000000-0000-4000-8000-000000000001",
+      "name": "Fulfilment Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -700,
+        0
+      ],
+      "webhookId": "70000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body ?? $json;\nif (!body || typeof body !== 'object') throw new Error('A JSON request body is required');\nconst uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n  const r = Math.floor(Math.random() * 16);\n  return (c === 'x' ? r : (r & 3) | 8).toString(16);\n});\nconst allowed = ['ORDER_PLACED','PREPARING','READY_FOR_PICKUP','PARTIALLY_COLLECTED','FULFILLED','CANCELLED'];\nif (!allowed.includes(String(body.newStatus))) throw new Error('Unsupported fulfilment status');\nif (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(body.orderId ?? ''))) throw new Error('orderId must be a UUID');\nconst messages = { ORDER_PLACED:'Your shared order was placed.', PREPARING:'Your shared order is being prepared.', READY_FOR_PICKUP:'Your shared order is ready for pickup.', PARTIALLY_COLLECTED:'Part of your shared order was collected.', FULFILLED:'Your shared order was fulfilled.', CANCELLED:'Your shared order was cancelled.' };\nreturn [{ json: { eventId: body.eventId || uuid(), correlationId: body.correlationId || uuid(), orderId: body.orderId, newStatus: body.newStatus, message: messages[body.newStatus], deliveryTargets: ['web_app'], createdAt: new Date().toISOString() } }];"
+      },
+      "id": "70000000-0000-4000-8000-000000000002",
+      "name": "Validate and Format Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(i => ({ json: { accepted: true, notification: i.json } }));"
+      },
+      "id": "70000000-0000-4000-8000-000000000003",
+      "name": "Return Notification Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "70000000-0000-4000-8000-000000000004",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## MVP notification dispatcher\nProduces a channel-neutral notification envelope for the web application. Add email/Slack nodes later without changing the event contract.",
+        "width": 560,
+        "height": 220,
+        "color": 5
+      },
+      "id": "70000000-0000-4000-8000-000000000005",
+      "name": "Note 005",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Fulfilment Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate and Format Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Format Event": {
+      "main": [
+        [
+          {
+            "node": "Return Notification Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Notification Envelope": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

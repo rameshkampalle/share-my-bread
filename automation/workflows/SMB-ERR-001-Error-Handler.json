@@ -1,0 +1,117 @@
+{
+  "name": "SMB-ERR-001-Error-Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "80000000-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n  const r = Math.floor(Math.random() * 16);\n  return (c === 'x' ? r : (r & 3) | 8).toString(16);\n});\nconst execution = $json.execution || {};\nconst workflow = $json.workflow || {};\nconst err = execution.error || {};\nreturn [{ json: { correlationId: uuid(), action: 'N8N_WORKFLOW_FAILED', entityType: 'N8N_WORKFLOW', beforeJson: null, afterJson: { workflowId: workflow.id || null, workflowName: workflow.name || null, executionId: execution.id || null, lastNodeExecuted: execution.lastNodeExecuted || null, message: String(err.message || 'Workflow failed').slice(0, 500), occurredAt: new Date().toISOString() } } }];"
+      },
+      "id": "80000000-0000-4000-8000-000000000002",
+      "name": "Sanitize Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "audit_events",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $json.correlationId }}"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "={{ $json.action }}"
+            },
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "={{ $json.entityType }}"
+            },
+            {
+              "fieldId": "before_json",
+              "fieldValue": "={{ $json.beforeJson }}"
+            },
+            {
+              "fieldId": "after_json",
+              "fieldValue": "={{ $json.afterJson }}"
+            }
+          ]
+        }
+      },
+      "id": "80000000-0000-4000-8000-000000000003",
+      "name": "Write Sanitized Audit Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Configure after import\nSelect `SMB - Supabase`, activate this workflow, then select it as the Error Workflow in the settings of production workflows. Secrets and stack traces are intentionally not persisted.",
+        "width": 600,
+        "height": 230,
+        "color": 5
+      },
+      "id": "80000000-0000-4000-8000-000000000004",
+      "name": "Note 004",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sanitize Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize Error": {
+      "main": [
+        [
+          {
+            "node": "Write Sanitized Audit Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
