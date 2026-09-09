@@ -330,9 +330,26 @@ export function Storefront() {
   }
 
   function chooseCandidate(productId: string, name: string, quantity = 1) {
-    setAssistantResult((current) => current ? { ...current, responseType: "CART_PROPOSAL", message: `${name} is selected. Confirm before it is added to your cart.`, requiresConfirmation: true, proposal: { action: "ADD_ITEMS", items: [{ productId, name, quantity }] } } : current);
-    setSelectedProposalIds([productId]);
-    setProposalQuantities({ [productId]: quantity });
+    setAssistantResult((current) => {
+      if (!current) return current;
+      const existingItems = current.proposal?.items ?? [];
+      const items = existingItems.some((item) => item.productId === productId)
+        ? existingItems
+        : [...existingItems, { productId, name, quantity }];
+      const candidates = (current.candidates ?? []).filter((candidate) => candidate.productId !== productId);
+      return {
+        ...current,
+        responseType: "CART_PROPOSAL",
+        message: candidates.length
+          ? `${name} is selected. Choose any other requested products, then confirm the selected items.`
+          : `${name} is selected. Confirm before the selected items are added to your cart.`,
+        requiresConfirmation: true,
+        proposal: { action: "ADD_ITEMS", items },
+        candidates,
+      };
+    });
+    setSelectedProposalIds((current) => current.includes(productId) ? current : [...current, productId]);
+    setProposalQuantities((current) => ({ ...current, [productId]: quantity }));
     setDecision(null);
   }
 
@@ -457,7 +474,7 @@ export function Storefront() {
               <div className="assistant-response">
                 <span className="response-type">{(assistantResult.responseType ?? "ASSISTANT_RESPONSE").replaceAll("_", " ")}</span>
                 <p>{assistantResult.message}</p>
-                {!!assistantResult.candidates?.length && !assistantResult.proposal && <div className="candidate-options"><p>Choose a product:</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>Choose →</span></button>)}</div>}
+                {!!assistantResult.candidates?.length && <div className="candidate-options"><p>{assistantResult.proposal ? "Choose another requested product:" : "Choose one or more requested products:"}</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>Add to proposal →</span></button>)}</div>}
                 {assistantResult.proposal?.items && <div className="proposal-items"><p>{assistantResult.proposal.items.length > 1 ? "Select one or more items:" : "Proposed item:"}</p>{assistantResult.proposal.items.map((item) => {
                   const quantity = proposalQuantities[item.productId] ?? item.quantity;
                   const maximum = maximumAddable(item.productId);
