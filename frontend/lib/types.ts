@@ -31,7 +31,14 @@ export type Cart = {
   group_name: string;
   currency: string;
   subtotal: number;
-  lines: Array<{ id: string; product_id: string; name: string; sku: string; unit: string; quantity: number; unit_price: number; line_total: number }>;
+  member_subtotal: number;
+  viewer_role: "MEMBER" | "ADMIN";
+  lines: Array<{ id: string; product_id: string; name: string; sku: string; unit: string; quantity: number; unit_price: number; line_total: number; contributor_id: string; contributor_name: string; editable: boolean }>;
+};
+
+export type Workspace = {
+  profile: { id: string; display_name: string; app_role: "MEMBER" | "ADMIN"; can_shop: boolean; can_deliver: boolean };
+  groups: Array<{ id: string; name: string; join_code: string; member_role: "MEMBER" | "COORDINATOR"; coordinator_id: string; pickup_point_id: string | null; pickup_label: string | null; pickup_address: string | null }>;
 };
 
 export type Journey = {
@@ -41,9 +48,15 @@ export type Journey = {
   order_lines: Array<{ id: string; product_snapshot: { name: string; sku: string; unit: string }; quantity: number; unit_price: number; total: number }>;
   allocations: Array<{ id: string; line_id: string; amount: number; basis: string }>;
   obligation: { id: string; amount_due: number; amount_collected: number; status: string; committed_at: string | null; updated_at: string } | null;
+  group_obligations: Array<{ id: string; user_id: string; display_name: string; amount_due: number; amount_collected: number; status: string; items_collected: boolean; committed_at: string | null; updated_at: string }>;
+  pending_commitments: number;
+  pending_collections: number;
+  pending_item_collections: number;
+  member_decisions: Array<{ id: string; display_name: string; member_role: string; decision: string; decided_at: string | null }>;
   fulfilment_events: Array<{ id: string; old_status: string | null; new_status: string; source: string; note: string | null; created_at: string }>;
   audit_events: Array<{ id: string; action: string; entity_type: string; after_json: Record<string, unknown> | null; created_at: string }>;
   is_admin: boolean;
+  is_coordinator: boolean;
   dev_fulfilment_mode: boolean;
 };
 
@@ -59,6 +72,7 @@ export type OrderHistoryItem = {
   cash_status: string | null;
   amount_due: number | null;
   amount_collected: number | null;
+  pending_item_collections: number;
   lines: Array<{ id: string; name: string; sku: string; unit: string; quantity: number; total: number }>;
 };
 

@@ -28,8 +28,8 @@ AI may search, recommend, explain, and create proposals. It must not directly ch
 
 ## Safe setup order
 
-1. Run `database/migrations/001_extensions.sql` through `005_rls_policies.sql` in order.
-2. Run `database/seed/001_products.sql` and `002_inventory.sql`.
+1. Run `database/migrations/001_extensions.sql` through `006_multi_user_roles.sql` in order.
+2. Run `database/seed/001_products.sql`, `002_inventory.sql`, `003_demo_workspace.sql`, then `004_multi_user_demo.sql`.
 3. Configure cloud variables using `.env.example`; never commit their real values.
 4. Deploy the backend and verify `/health`.
 5. Index products with `SMB-VEC-001-Index-Products` in n8n.

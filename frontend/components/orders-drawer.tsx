@@ -7,11 +7,12 @@ type Props = {
   loading: boolean;
   busy: boolean;
   error: string;
+  isAdmin: boolean;
   onClose: () => void;
   onAction: (path: string, body: object) => void;
 };
 
-export function OrdersDrawer({ orders, loading, busy, error, onClose, onAction }: Props) {
+export function OrdersDrawer({ orders, loading, busy, error, isAdmin, onClose, onAction }: Props) {
   return (
     <div className="drawer-backdrop" onMouseDown={onClose}>
       <aside className="cart-drawer" aria-label="Order history" onMouseDown={(event) => event.stopPropagation()}>
@@ -26,10 +27,11 @@ export function OrdersDrawer({ orders, loading, busy, error, onClose, onAction }
             {order.lines.map((line) => <div className="allocation-row" key={line.id}><span>{line.quantity}× {line.name}</span><strong>{money.format(Number(line.total))}</strong></div>)}
             <div className="history-payment"><span>Cash</span><strong>{order.cash_status?.replaceAll("_", " ") ?? "—"} · {money.format(Number(order.amount_collected ?? 0))} collected</strong></div>
             <div className="history-actions">
-              {order.status === "ORDER_PLACED" && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "PREPARING" })}>Move to preparing</button>}
-              {order.status === "PREPARING" && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "READY_FOR_PICKUP" })}>Mark ready for pickup</button>}
-              {order.status === "READY_FOR_PICKUP" && order.cash_status !== "COLLECTED" && <button disabled={busy} onClick={() => onAction("/api/journey/collect-cash", { orderId: order.id })}>Record cash collected</button>}
-              {order.status === "READY_FOR_PICKUP" && order.cash_status === "COLLECTED" && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "FULFILLED" })}>Mark fulfilled</button>}
+              {isAdmin && order.status === "ORDER_PLACED" && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "PREPARING" })}>Move to preparing</button>}
+              {isAdmin && order.status === "PREPARING" && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "READY_FOR_PICKUP" })}>Mark ready for pickup</button>}
+              {isAdmin && order.status === "READY_FOR_PICKUP" && order.cash_status !== "COLLECTED" && <button disabled={busy} onClick={() => onAction("/api/journey/collect-cash", { orderId: order.id })}>Record next cash collection</button>}
+              {isAdmin && order.status === "READY_FOR_PICKUP" && order.pending_item_collections > 0 && <button disabled={busy} onClick={() => onAction("/api/journey/collect-items", { orderId: order.id })}>Record next item collection</button>}
+              {isAdmin && order.status === "READY_FOR_PICKUP" && order.cash_status === "COLLECTED" && order.pending_item_collections === 0 && <button disabled={busy} onClick={() => onAction("/api/journey/fulfilment", { orderId: order.id, status: "FULFILLED" })}>Mark fulfilled</button>}
             </div>
           </article>)}
         </div>

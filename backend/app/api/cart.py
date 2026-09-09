@@ -8,6 +8,8 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from app.shared.auth import CurrentUser, get_current_user
+from app.shared.access import require_shopper
+from app.domain.order_policy import can_edit_line
 from app.shared.config import get_settings
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
@@ -58,7 +60,7 @@ async def read_cart(connection, user_id: str, cycle_id: str | None = None):
     cycle_filter = "and oc.id = %s" if cycle_id else ""
     params = [user_id, cycle_id] if cycle_id else [user_id]
     query = f"""
-        select oc.id as cycle_id, oc.cutoff_at, g.name as group_name
+        select oc.id as cycle_id, oc.group_id, oc.cutoff_at, g.name as group_name
         from public.order_cycles oc
         join public.groups g on g.id = oc.group_id
         join public.group_members gm on gm.group_id = g.id
@@ -75,6 +77,7 @@ async def read_cart(connection, user_id: str, cycle_id: str | None = None):
         limit 1
     """
     async with connection.cursor(row_factory=dict_row) as cursor:
+        profile = await require_shopper(cursor, user_id)
         await cursor.execute(query, params)
         cycle = await cursor.fetchone()
         if not cycle:
@@ -83,17 +86,28 @@ async def read_cart(connection, user_id: str, cycle_id: str | None = None):
             """
             select cl.id, cl.product_id, p.name, p.sku, p.unit, cl.quantity,
                    cl.unit_price_snapshot as unit_price,
-                   (cl.quantity * cl.unit_price_snapshot)::numeric(12,2) as line_total
+                   (cl.quantity * cl.unit_price_snapshot)::numeric(12,2) as line_total,
+                   cl.added_by as contributor_id, pr.display_name as contributor_name,
+                   (cl.added_by=%s or %s='ADMIN' or gm.member_role='COORDINATOR') as editable
             from public.cart_lines cl
             join public.products p on p.id = cl.product_id
-            where cl.cycle_id = %s and cl.added_by = %s and cl.status = 'ACTIVE'
-            order by cl.created_at
+            join public.profiles pr on pr.id=cl.added_by
+            join public.group_members gm on gm.group_id=%s and gm.user_id=%s
+            where cl.cycle_id = %s and cl.status = 'ACTIVE'
+            order by pr.display_name,cl.created_at
             """,
-            [cycle["cycle_id"], user_id],
+            [user_id,profile.app_role,cycle["group_id"],user_id,cycle["cycle_id"]],
         )
         lines = await cursor.fetchall()
-    subtotal = sum(float(line["line_total"]) for line in lines)
-    return {**cycle, "lines": lines, "subtotal": round(subtotal, 2), "currency": "EUR"}
+        await cursor.execute(
+            """select coalesce(sum(quantity*unit_price_snapshot),0)::numeric(12,2) as subtotal
+               from public.cart_lines where cycle_id=%s and added_by=%s and status='ACTIVE'""",
+            [cycle["cycle_id"],user_id],
+        )
+        member_subtotal=(await cursor.fetchone())["subtotal"]
+    subtotal = sum(line["line_total"] for line in lines)
+    return {**cycle, "lines": lines, "subtotal": subtotal, "member_subtotal": member_subtotal,
+            "currency": "EUR", "viewer_role": profile.app_role}
 
 
 @router.get("/current")
@@ -103,11 +117,12 @@ async def get_current_cart(user: CurrentUser = Depends(get_current_user)):
 
 
 async def require_open_cycle(cursor, user_id: str):
+    await require_shopper(cursor, user_id)
     await cursor.execute(
         """
         select oc.id from public.order_cycles oc
         join public.group_members gm on gm.group_id=oc.group_id
-        where gm.user_id=%s and oc.status='OPEN'
+        where gm.user_id=%s and oc.status='OPEN' and oc.cutoff_at>timezone('utc',now())
         order by oc.cutoff_at limit 1 for update of oc
         """,
         [user_id],
@@ -133,7 +148,14 @@ async def add_item(payload: AddItemRequest, user: CurrentUser = Depends(get_curr
                     [payload.productId],
                 )
                 product = await cursor.fetchone()
-                if not product or payload.quantity > product["free"]:
+                if not product:
+                    raise HTTPException(status_code=409, detail="The requested product quantity is unavailable.")
+                await cursor.execute(
+                    """select coalesce(sum(quantity),0) as in_cart from public.cart_lines
+                       where cycle_id=%s and product_id=%s and status='ACTIVE'""",
+                    [cycle_id,payload.productId],
+                )
+                if (await cursor.fetchone())["in_cart"] + payload.quantity > product["free"]:
                     raise HTTPException(status_code=409, detail="The requested product quantity is unavailable.")
                 await cursor.execute(
                     """
@@ -145,8 +167,6 @@ async def add_item(payload: AddItemRequest, user: CurrentUser = Depends(get_curr
                 )
                 line = await cursor.fetchone()
                 if line:
-                    if line["quantity"] + payload.quantity > product["free"]:
-                        raise HTTPException(status_code=409, detail="The requested total exceeds available stock.")
                     await cursor.execute("update public.cart_lines set quantity=quantity+%s where id=%s", [payload.quantity,line["id"]])
                 else:
                     await cursor.execute(
@@ -155,6 +175,7 @@ async def add_item(payload: AddItemRequest, user: CurrentUser = Depends(get_curr
                         values (%s,%s,%s,'Manual catalogue add',%s,%s,'ACTIVE')""",
                         [cycle_id,user.id,payload.productId,payload.quantity,product["price"]],
                     )
+                await cursor.execute("delete from public.authorizations where cycle_id=%s and user_id=%s",[cycle_id,user.id])
         return await read_cart(connection,user.id,str(cycle_id))
 
 
@@ -163,20 +184,30 @@ async def update_item(line_id: uuid.UUID, payload: UpdateItemRequest, user: Curr
     async with await connect_database() as connection:
         async with connection.transaction():
             async with connection.cursor(row_factory=dict_row) as cursor:
+                profile=await require_shopper(cursor,user.id)
                 await cursor.execute(
-                    """select cl.id,cl.cycle_id,(i.available_quantity-i.reserved_quantity) as free
+                    """select cl.id,cl.cycle_id,cl.product_id,cl.added_by,
+                              (i.available_quantity-i.reserved_quantity) as free,gm.member_role
                     from public.cart_lines cl join public.order_cycles oc on oc.id=cl.cycle_id
                     join public.inventory i on i.product_id=cl.product_id
-                    where cl.id=%s and cl.added_by=%s and cl.status='ACTIVE' and oc.status='OPEN'
+                    join public.group_members gm on gm.group_id=oc.group_id and gm.user_id=%s
+                    where cl.id=%s and cl.status='ACTIVE' and oc.status='OPEN'
+                      and oc.cutoff_at>timezone('utc',now())
                     for update of cl,i""",
-                    [line_id,user.id],
+                    [user.id,line_id],
                 )
                 line=await cursor.fetchone()
-                if not line:
+                if not line or not can_edit_line(app_role=profile.app_role,member_role=line["member_role"],actor_id=user.id,owner_id=str(line["added_by"])):
                     raise HTTPException(status_code=404,detail="Editable cart line not found.")
-                if payload.quantity > line["free"]:
+                await cursor.execute(
+                    """select coalesce(sum(quantity),0) as other_quantity from public.cart_lines
+                       where cycle_id=%s and product_id=%s and status='ACTIVE' and id<>%s""",
+                    [line["cycle_id"],line["product_id"],line_id],
+                )
+                if (await cursor.fetchone())["other_quantity"] + payload.quantity > line["free"]:
                     raise HTTPException(status_code=409,detail="The requested quantity exceeds available stock.")
                 await cursor.execute("update public.cart_lines set quantity=%s where id=%s",[payload.quantity,line_id])
+                await cursor.execute("delete from public.authorizations where cycle_id=%s and user_id=%s",[line["cycle_id"],line["added_by"]])
         return await read_cart(connection,user.id,str(line["cycle_id"]))
 
 
@@ -185,16 +216,20 @@ async def remove_item(line_id: uuid.UUID, user: CurrentUser = Depends(get_curren
     async with await connect_database() as connection:
         async with connection.transaction():
             async with connection.cursor(row_factory=dict_row) as cursor:
+                profile=await require_shopper(cursor,user.id)
                 await cursor.execute(
-                    """update public.cart_lines cl set status='REMOVED'
-                    from public.order_cycles oc where cl.cycle_id=oc.id and cl.id=%s
-                    and cl.added_by=%s and cl.status='ACTIVE' and oc.status='OPEN'
-                    returning cl.cycle_id""",
-                    [line_id,user.id],
+                    """select cl.id,cl.cycle_id,cl.added_by,gm.member_role from public.cart_lines cl
+                       join public.order_cycles oc on oc.id=cl.cycle_id
+                       join public.group_members gm on gm.group_id=oc.group_id and gm.user_id=%s
+                       where cl.id=%s and cl.status='ACTIVE' and oc.status='OPEN'
+                         and oc.cutoff_at>timezone('utc',now()) for update of cl""",
+                    [user.id,line_id],
                 )
                 line=await cursor.fetchone()
-                if not line:
+                if not line or not can_edit_line(app_role=profile.app_role,member_role=line["member_role"],actor_id=user.id,owner_id=str(line["added_by"])):
                     raise HTTPException(status_code=404,detail="Editable cart line not found.")
+                await cursor.execute("update public.cart_lines set status='REMOVED' where id=%s",[line_id])
+                await cursor.execute("delete from public.authorizations where cycle_id=%s and user_id=%s",[line["cycle_id"],line["added_by"]])
         return await read_cart(connection,user.id,str(line["cycle_id"]))
 
 
@@ -213,6 +248,7 @@ async def confirm_proposal(
     async with await connect_database() as connection:
         async with connection.transaction():
             async with connection.cursor(row_factory=dict_row) as cursor:
+                await require_shopper(cursor,user.id)
                 await cursor.execute(
                     "select response_body from public.idempotency_records where actor_id=%s and idempotency_key=%s",
                     [user.id, idempotency_key],
@@ -226,6 +262,7 @@ async def confirm_proposal(
                     select oc.id from public.order_cycles oc
                     join public.group_members gm on gm.group_id=oc.group_id
                     where oc.id=%s and oc.status='OPEN' and gm.user_id=%s
+                      and oc.cutoff_at>timezone('utc',now())
                     for update of oc
                     """,
                     [payload.cycleId, user.id],
@@ -249,7 +286,12 @@ async def confirm_proposal(
                 for item in payload.proposal.items:
                     product = products[item.productId]
                     free = product["available_quantity"] - product["reserved_quantity"]
-                    if item.quantity > free:
+                    await cursor.execute(
+                        """select coalesce(sum(quantity),0) as in_cart from public.cart_lines
+                           where cycle_id=%s and product_id=%s and status='ACTIVE'""",
+                        [payload.cycleId,item.productId],
+                    )
+                    if (await cursor.fetchone())["in_cart"] + item.quantity > free:
                         raise HTTPException(status_code=409, detail=f"Insufficient stock for product {item.productId}.")
                     await cursor.execute(
                         """
@@ -274,6 +316,8 @@ async def confirm_proposal(
                             """,
                             [payload.cycleId, user.id, item.productId, payload.sourceText, item.quantity, product["price"]],
                         )
+
+                await cursor.execute("delete from public.authorizations where cycle_id=%s and user_id=%s",[payload.cycleId,user.id])
 
                 await cursor.execute(
                     """

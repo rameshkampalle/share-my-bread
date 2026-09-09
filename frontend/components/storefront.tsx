@@ -5,7 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { AssistantResponse, Cart, InventoryRow, Journey, OrderHistoryItem, Product } from "@/lib/types";
+import type { AssistantResponse, Cart, InventoryRow, Journey, OrderHistoryItem, Product, Workspace } from "@/lib/types";
 
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
@@ -34,6 +34,15 @@ export function Storefront() {
   const [email, setEmail] = useState("demo.member@sharemybread.test");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [displayName, setDisplayName] = useState("");
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [pickupLabel, setPickupLabel] = useState("Community pickup");
+  const [pickupAddress, setPickupAddress] = useState("Utrecht, Netherlands");
+  const [cutoffAt, setCutoffAt] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productError, setProductError] = useState("");
@@ -86,6 +95,24 @@ export function Storefront() {
     else setCartError(cartResult.reason instanceof Error ? cartResult.reason.message : "Cart unavailable.");
     if (journeyResult.status === "fulfilled") setJourney(journeyResult.value as Journey);
     else setJourneyError(journeyResult.reason instanceof Error ? journeyResult.reason.message : "Order journey unavailable.");
+  }, [backend]);
+
+  const refreshJourney = useCallback(async () => {
+    setJourneyError("");
+    try {
+      setJourney(await backend("/api/journey/current") as Journey);
+    } catch (error) {
+      setJourneyError(error instanceof Error ? error.message : "Order journey unavailable.");
+    }
+  }, [backend]);
+
+  const refreshWorkspace = useCallback(async () => {
+    setWorkspaceError("");
+    try {
+      setWorkspace(await backend("/api/workspace/me") as Workspace);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Workspace unavailable.");
+    }
   }, [backend]);
 
   const openOrderHistory = useCallback(async () => {
@@ -147,8 +174,13 @@ export function Storefront() {
     }
 
     void loadProducts();
+    void refreshWorkspace();
+  }, [session, refreshWorkspace]);
+
+  useEffect(() => {
+    if (!session || !workspace?.groups.length) return;
     void refreshOrder();
-  }, [session, refreshOrder]);
+  }, [session,workspace?.groups.length,refreshOrder]);
 
   useEffect(() => {
     if (journey?.order?.status !== "FULFILLED" || rolloverStarted.current) return;
@@ -172,7 +204,7 @@ export function Storefront() {
       const value = await backend(path, init);
       setCart(value as Cart);
       setJourneyNotice(notice);
-      await refreshOrder();
+      await refreshJourney();
     } catch (error) {
       setJourneyError(error instanceof Error ? error.message : "Cart update failed.");
     } finally {
@@ -181,7 +213,6 @@ export function Storefront() {
   }
 
   function addProduct(product: Product) {
-    setCartOpen(true);
     void mutateCart("/api/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: 1 }) }, `${product.name} added to the cart.`);
   }
 
@@ -201,10 +232,13 @@ export function Storefront() {
       const value = await backend(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
       setJourney(value as Journey);
       const messages: Record<string, string> = {
-        "/api/journey/authorize": "Cart authorized and member cost calculated.",
+        "/api/journey/authorize": "Your items are authorized. The shared cart remains open until cutoff.",
+        "/api/journey/decline": "You declined this cycle. Your items will not enter this order.",
+        "/api/journey/close-cart": "Cutoff applied and member cash obligations calculated.",
         "/api/journey/commit-cash": "Cash commitment recorded.",
         "/api/journey/finalize": "Mock retailer order placed.",
         "/api/journey/collect-cash": "Cash collection recorded.",
+        "/api/journey/collect-items": "Item collection recorded.",
         "/api/journey/fulfilment": "Order status updated.",
       };
       setJourneyNotice(messages[path] ?? "Order updated.");
@@ -262,6 +296,25 @@ export function Storefront() {
     if (error) setAuthError(error.message);
   }
 
+  async function signUp(event: FormEvent) {
+    event.preventDefault();
+    setAuthError("");
+    const { error } = await getSupabaseBrowserClient().auth.signUp({
+      email,password,options:{ data:{ display_name: displayName || email.split("@")[0] } },
+    });
+    if (error) setAuthError(error.message);
+    else setAuthError("Account created. If email confirmation is enabled, confirm it before signing in.");
+  }
+
+  async function groupAction(path: string, body: object) {
+    setWorkspaceError("");
+    try {
+      setWorkspace(await backend(path,{ method:"POST",body:JSON.stringify(body) }) as Workspace);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Group action failed.");
+    }
+  }
+
   async function askAssistant(event: FormEvent) {
     event.preventDefault();
     if (!assistantQuery.trim()) return;
@@ -312,7 +365,7 @@ export function Storefront() {
       setCart(value.cart);
       setDecision("accepted");
       setJourneyNotice("Assistant proposal confirmed and added to the cart.");
-      await refreshOrder();
+      await refreshJourney();
     } catch (error) {
       setAssistantError(error instanceof Error ? error.message : "Proposal confirmation failed.");
     } finally {
@@ -370,19 +423,27 @@ export function Storefront() {
           <p className="story-foot">Powered by Supabase · n8n · Gemini · Pinecone</p>
         </section>
         <section className="login-panel">
-          <form className="login-card" onSubmit={signIn}>
+          <form className="login-card" onSubmit={authMode === "signin" ? signIn : signUp}>
             <p className="eyebrow ink">Member access</p>
-            <h2>Welcome back</h2>
-            <p>Sign in with the demo account created in Supabase.</p>
+            <h2>{authMode === "signin" ? "Welcome back" : "Create an account"}</h2>
+            <p>{authMode === "signin" ? "Sign in with your Supabase account." : "Create a retail-member account, then create or join a group."}</p>
+            {authMode === "signup" && <label>Display name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></label>}
             <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
             <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your Supabase password" required /></label>
             {authError && <p className="error-banner" role="alert">{authError}</p>}
-            <button className="primary-button" type="submit">Sign in to the pantry <span>→</span></button>
+            <button className="primary-button" type="submit">{authMode === "signin" ? "Sign in to the pantry" : "Create account"} <span>→</span></button>
+            <button className="secondary-button" type="button" onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setAuthError(""); }}>{authMode === "signin" ? "Need an account? Sign up" : "Already registered? Sign in"}</button>
             <p className="privacy-note">Your session is securely managed by Supabase Auth.</p>
           </form>
         </section>
       </main>
     );
+  }
+
+  if (!workspace) return <main className="center-stage"><div className="loader" aria-label="Loading workspace" />{workspaceError && <p className="error-banner">{workspaceError}</p>}</main>;
+
+  if (!workspace.groups.length) {
+    return <main className="login-page"><section className="login-story"><a className="brand brand-light" href="#">Share My Bread<span>.</span></a><div><p className="eyebrow">Shared ordering starts here</p><h1>Create or join<br />a buying group.</h1><p className="story-copy">A coordinator creates the group, cutoff and pickup point. Other members join using its code.</p></div></section><section className="login-panel"><div className="login-card"><p className="eyebrow ink">Group setup</p><h2>Hello, {workspace.profile.display_name}</h2><label>New group name<input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Neighbourhood pantry" /></label><label>Join code<input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} placeholder="BREAD2026" /></label><label>Order cutoff<input type="datetime-local" value={cutoffAt} onChange={(e) => setCutoffAt(e.target.value)} /></label><label>Pickup point<input value={pickupLabel} onChange={(e) => setPickupLabel(e.target.value)} /></label><label>Pickup address<input value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)} /></label>{workspaceError && <p className="error-banner">{workspaceError}</p>}<button className="primary-button" disabled={groupName.length < 2 || joinCode.length < 6 || !cutoffAt} onClick={() => void groupAction("/api/groups",{ name:groupName,joinCode,pickupLabel,pickupAddress,cutoffAt:new Date(cutoffAt).toISOString() })}>Create group<span>→</span></button><button className="secondary-button" disabled={joinCode.length < 6} onClick={() => void groupAction("/api/groups/join",{ joinCode })}>Join existing group</button><button className="secondary-button" onClick={() => getSupabaseBrowserClient().auth.signOut()}>Sign out</button></div></section></main>;
   }
 
   return (
@@ -391,12 +452,12 @@ export function Storefront() {
         <a className="brand" href="#top">Share My Bread<span>.</span></a>
         <nav aria-label="Primary navigation">
           <a className="active" href="#inventory">Inventory</a>
-          <button onClick={() => void openOrderHistory()}>Orders</button>
+          <button onClick={() => void openOrderHistory()}>{workspace.profile.app_role === "ADMIN" ? "Orders & delivery" : "Orders"}</button>
           <button onClick={() => setAssistantOpen(true)}>AI assistant</button>
         </nav>
         <div className="member-menu">
           <span className="avatar">{session.user.email?.charAt(0).toUpperCase()}</span>
-          <div><strong>{session.user.user_metadata.display_name ?? "Demo member"}</strong><small>{session.user.email}</small></div>
+          <div><strong>{workspace.profile.display_name}</strong><small>{workspace.profile.app_role} · {session.user.email}</small></div>
           <button className="cart-pill" onClick={() => setCartOpen(true)}>{cart?.lines.length ?? 0} cart items · {money.format(cart?.subtotal ?? 0)}</button>
           <button onClick={() => getSupabaseBrowserClient().auth.signOut()}>Sign out</button>
         </div>
@@ -455,7 +516,7 @@ export function Storefront() {
       <button className="assistant-fab" onClick={() => setAssistantOpen(true)} aria-label="Open AI shopping assistant">✦</button>
 
       {cartOpen && <CartDrawer cart={cart} journey={journey} busy={mutating} error={journeyError || cartError} notice={journeyNotice} onClose={() => setCartOpen(false)} onQuantity={updateQuantity} onRemove={removeLine} onAction={journeyAction} />}
-      {ordersOpen && <OrdersDrawer orders={orders} loading={ordersLoading} busy={mutating} error={ordersError} onClose={() => setOrdersOpen(false)} onAction={historyAction} />}
+      {ordersOpen && <OrdersDrawer orders={orders} loading={ordersLoading} busy={mutating} error={ordersError} isAdmin={workspace.profile.app_role === "ADMIN"} onClose={() => setOrdersOpen(false)} onAction={historyAction} />}
 
       {assistantOpen && (
         <div className="drawer-backdrop" onMouseDown={() => setAssistantOpen(false)}>
