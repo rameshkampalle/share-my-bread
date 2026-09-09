@@ -15,8 +15,8 @@ begin
   end if;
 
   insert into public.profiles (id,display_name,app_role,status)
-  values (v_user_id,'Demo Member','MEMBER','ACTIVE')
-  on conflict (id) do update set display_name='Demo Member',status='ACTIVE',updated_at=timezone('utc',now());
+  values (v_user_id,'Demo Member','ADMIN','ACTIVE')
+  on conflict (id) do update set display_name='Demo Member',app_role='ADMIN',status='ACTIVE',updated_at=timezone('utc',now());
 
   insert into public.groups (id,name,coordinator_id,join_code,status)
   values (v_group_id,'Share My Bread Demo Group',v_user_id,'SMBDEMO2026','ACTIVE')
@@ -29,6 +29,14 @@ begin
   insert into public.pickup_points (id,group_id,label,address_text,latitude,longitude,active)
   values (v_pickup_id,v_group_id,'Demo Community Pickup','Utrecht, Netherlands',52.090737,5.121420,true)
   on conflict (id) do update set label=excluded.label,address_text=excluded.address_text,active=true;
+
+  -- Reset only the deterministic demo checkout so the 12-step journey can be replayed.
+  delete from public.audit_events where entity_id=v_cycle_id
+    or entity_id in (select id from public.orders where cycle_id=v_cycle_id);
+  delete from public.outbox_events where aggregate_id=v_cycle_id
+    or aggregate_id in (select id from public.orders where cycle_id=v_cycle_id);
+  delete from public.orders where cycle_id=v_cycle_id;
+  delete from public.authorizations where cycle_id=v_cycle_id;
 
   insert into public.order_cycles (id,group_id,cutoff_at,pickup_point_id,status,version)
   values (v_cycle_id,v_group_id,timezone('utc',now())+interval '7 days',v_pickup_id,'OPEN',1)

@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -7,10 +8,13 @@ from fastapi.responses import JSONResponse
 
 from app.shared.config import get_settings
 from app.api.cart import router as cart_router
+from app.api.journey import router as journey_router
 
 settings = get_settings()
+logger = logging.getLogger("share_my_bread")
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.include_router(cart_router)
+app.include_router(journey_router)
 
 if settings.allowed_origins:
     app.add_middleware(
@@ -29,6 +33,7 @@ async def correlation_id_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception:
+        logger.exception("Unhandled request failure correlation_id=%s", correlation_id)
         response = JSONResponse(
             status_code=500,
             content={

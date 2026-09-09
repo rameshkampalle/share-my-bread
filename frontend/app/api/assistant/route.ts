@@ -41,7 +41,21 @@ export async function POST(request: Request) {
       result = { error: text || "n8n returned an empty response." };
     }
 
-    return NextResponse.json(result, { status: response.status });
+    const normalized = Array.isArray(result) ? result[0] : result;
+    if (
+      response.ok &&
+      (!normalized ||
+        typeof normalized !== "object" ||
+        !("responseType" in normalized) ||
+        typeof normalized.responseType !== "string")
+    ) {
+      return NextResponse.json(
+        { error: "n8n returned an incomplete assistant response." },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json(normalized, { status: response.status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Assistant request failed.";
     return NextResponse.json({ error: message }, { status: 502 });
