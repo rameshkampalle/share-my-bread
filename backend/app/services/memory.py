@@ -55,7 +55,11 @@ class Mem0Memory:
         if memory_id not in {str(item.get("id")) for item in memories}:
             raise KeyError(memory_id)
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.delete(f"{self.base_url}/v1/memories/{memory_id}", headers=self._headers())
+            response = await client.delete(
+                f"{self.base_url}/v1/memories/{memory_id}/",
+                headers=self._headers(),
+                params={"delete_linked": "true"},
+            )
         self._raise(response)
 
     async def delete_all(self, user_id: str) -> None:

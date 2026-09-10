@@ -7,6 +7,7 @@
 - Supabase user UUIDs are namespaced and used as the Mem0 user boundary.
 - Only explicit grocery preferences may be saved. Cart, order, stock, payment and audio data remain outside Mem0.
 - Users can inspect and delete individual memories, or disable memory and erase all of their memories.
+- Individual deletion cascades through Mem0's linked V3 history so an older superseded preference cannot resurface.
 - A failed or disabled memory service never blocks the normal assistant.
 
 ## Deployment
