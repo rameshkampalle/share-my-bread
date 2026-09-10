@@ -16,10 +16,11 @@ type BrowserSpeechRecognition = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
-  onresult: (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void;
+  onresult: (event: { results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }> }) => void;
   onerror: () => void;
   onend: () => void;
   start: () => void;
+  stop: () => void;
 };
 
 function inventoryFor(product: Product): InventoryRow | null {
@@ -78,6 +79,7 @@ export function Storefront() {
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
   const [listening, setListening] = useState(false);
+  const voiceRecognition = useRef<BrowserSpeechRecognition | null>(null);
   const [memory, setMemory] = useState<MemoryStatus | null>(null);
   const [preference, setPreference] = useState("");
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -96,7 +98,8 @@ export function Storefront() {
       signal: init?.signal ?? AbortSignal.timeout(20000),
       headers: { "content-type": "application/json", authorization: `Bearer ${data.session.access_token}`, ...(init?.headers ?? {}) },
     });
-    const value = await response.json();
+    const responseText = await response.text();
+    const value = responseText ? JSON.parse(responseText) : null;
     if (!response.ok) throw new Error(value.detail ?? value.message ?? "Backend request failed.");
     return value;
   }, []);
@@ -494,6 +497,10 @@ export function Storefront() {
   }
 
   function startVoiceInput() {
+    if (listening && voiceRecognition.current) {
+      voiceRecognition.current.stop();
+      return;
+    }
     const browserWindow = window as unknown as {
       SpeechRecognition?: new () => BrowserSpeechRecognition;
       webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
@@ -506,12 +513,16 @@ export function Storefront() {
     setAssistantError("");
     setListening(true);
     const recognition = new Recognition();
+    voiceRecognition.current = recognition;
     recognition.lang = navigator.language || "en-GB";
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    recognition.onresult = (event) => setAssistantQuery(event.results[0]?.[0]?.transcript ?? "");
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
+      if (transcript) setAssistantQuery(transcript);
+    };
     recognition.onerror = () => setAssistantError("Voice input could not be captured. Please try again or type the request.");
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => { voiceRecognition.current = null; setListening(false); };
     recognition.start();
   }
 
@@ -676,7 +687,7 @@ export function Storefront() {
             </div>
             <form className="assistant-form" onSubmit={askAssistant}>
               <textarea value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
-              <button className="voice-button" type="button" disabled={listening || asking} onClick={startVoiceInput}>{listening ? "Listening…" : "🎙 Speak request"}</button>
+              <button className="voice-button" type="button" disabled={asking} onClick={startVoiceInput}>{listening ? "■ Stop listening" : "🎙 Speak request"}</button>
               <button className="primary-button" disabled={asking}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
             </form>
             {assistantError && <p className="error-banner" role="alert">{assistantError}</p>}
