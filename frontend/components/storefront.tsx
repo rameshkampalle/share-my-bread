@@ -90,13 +90,8 @@ export function Storefront() {
   const [selectedProposalIds, setSelectedProposalIds] = useState<string[]>([]);
   const [proposalQuantities, setProposalQuantities] = useState<Record<string, number>>({});
   const activeUserId = useRef<string | null>(null);
-  const memoryRefreshTimer = useRef<number | null>(null);
 
   const clearUserScopedState = useCallback(() => {
-    if (memoryRefreshTimer.current !== null) {
-      window.clearTimeout(memoryRefreshTimer.current);
-      memoryRefreshTimer.current = null;
-    }
     if (voiceRecognition.current) {
       voiceRecognition.current.stop();
       voiceRecognition.current = null;
@@ -489,16 +484,6 @@ export function Storefront() {
     }
   }
 
-  function scheduleMemoryRefresh() {
-    const requestUserId = session?.user.id;
-    if (!requestUserId) return;
-    if (memoryRefreshTimer.current !== null) window.clearTimeout(memoryRefreshTimer.current);
-    memoryRefreshTimer.current = window.setTimeout(() => {
-      memoryRefreshTimer.current = null;
-      if (activeUserId.current === requestUserId) void refreshMemory();
-    }, 2500);
-  }
-
   async function toggleMemory(enabled: boolean) {
     setMemoryBusy(true); setMemoryNotice("");
     try {
@@ -513,9 +498,14 @@ export function Storefront() {
     if (!preference.trim()) return;
     setMemoryBusy(true); setMemoryNotice("");
     try {
-      await backend("/api/memory/preferences", { method: "POST", body: JSON.stringify({ preference: preference.trim() }) });
-      setPreference(""); setMemoryNotice("Preference accepted. It may take a few seconds to appear.");
-      scheduleMemoryRefresh();
+      await backend("/api/memory/preferences", {
+        method: "POST",
+        signal: AbortSignal.timeout(35000),
+        body: JSON.stringify({ preference: preference.trim() }),
+      });
+      setPreference("");
+      await refreshMemory();
+      setMemoryNotice("Preference saved and ready to use.");
     } catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be saved."); }
     finally { setMemoryBusy(false); }
   }
@@ -526,7 +516,7 @@ export function Storefront() {
       await backend(`/api/memory/preferences/${id}`, { method: "DELETE" });
       setMemory((current) => current ? { ...current, memories: current.memories.filter((item) => item.id !== id) } : current);
       setMemoryNotice("Preference forgotten.");
-      scheduleMemoryRefresh();
+      await refreshMemory();
     }
     catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be deleted."); }
     finally { setMemoryBusy(false); }

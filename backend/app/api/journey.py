@@ -695,13 +695,6 @@ async def update_fulfilment(payload: FulfilmentRequest, user: CurrentUser = Depe
                             [order["group_id"], order["pickup_point_id"]],
                         )
                         new_cycle_id = (await cursor.fetchone())["id"]
-                        await cursor.execute(
-                            """insert into public.cart_lines
-                               (cycle_id,added_by,product_id,source_text,quantity,unit_price_snapshot,status)
-                               select %s,added_by,product_id,'Rolled forward after cutoff',quantity,unit_price_snapshot,'ACTIVE'
-                               from public.cart_lines where cycle_id=%s and status='ROLLED_FORWARD'""",
-                            [new_cycle_id,order["cycle_id"]],
-                        )
                         await add_audit(cursor, user.id, "NEW_ORDER_CYCLE_CREATED", "ORDER_CYCLE", new_cycle_id, {"previousOrderId": str(order["id"])})
         return await read_journey(connection, user.id)
 

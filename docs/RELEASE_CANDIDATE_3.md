@@ -8,6 +8,8 @@
 - Only explicit grocery preferences may be saved. Cart, order, stock, payment and audio data remain outside Mem0.
 - Users can inspect and delete individual memories, or disable memory and erase all of their memories.
 - Individual deletion cascades through Mem0's linked V3 history so an older superseded preference cannot resurface.
+- Preference creation waits for Mem0's asynchronous event to succeed before the UI reports that it is ready.
+- Forget waits until the deleted preference is absent from Mem0's list API before reporting success.
 - A failed or disabled memory service never blocks the normal assistant.
 
 ## Deployment
@@ -20,7 +22,7 @@
 ## Smoke test
 
 1. Retail User 1 enables memory and saves `I prefer vegan milk`.
-2. Wait several seconds, reopen the assistant, and verify the preference is listed.
+2. Verify the preference is listed before the UI reports `Preference saved and ready to use`.
 3. Ask by voice for milk; verify the transcript is editable before submission and the proposal still requires confirmation.
 4. Retail User 2 opens memory and must not see User 1's preference.
 5. User 1 deletes the preference, then disables memory; verify the list is empty.

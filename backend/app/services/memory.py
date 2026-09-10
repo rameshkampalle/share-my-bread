@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import httpx
 
 from app.domain.memory_policy import scoped_user_id
@@ -48,7 +51,27 @@ class Mem0Memory:
                       "metadata": {"application": "share-my-bread", "kind": "grocery_preference"}},
             )
         self._raise(response)
-        return response.json()
+        result = response.json()
+        event_id = result.get("event_id")
+        if not event_id:
+            raise MemoryUnavailable("Mem0 did not return a tracking event for the preference.")
+        return await self.wait_for_event(str(event_id))
+
+    async def wait_for_event(self, event_id: str, timeout_seconds: float = 25) -> dict:
+        """Wait until Mem0's asynchronous V3 add pipeline has really persisted the memory."""
+        deadline = time.monotonic() + timeout_seconds
+        async with httpx.AsyncClient(timeout=15) as client:
+            while time.monotonic() < deadline:
+                response = await client.get(f"{self.base_url}/v1/event/{event_id}/", headers=self._headers())
+                self._raise(response)
+                event = response.json()
+                status = str(event.get("status", "")).upper()
+                if status == "SUCCEEDED":
+                    return event
+                if status == "FAILED":
+                    raise MemoryUnavailable("Mem0 could not save the preference.")
+                await asyncio.sleep(0.5)
+        raise MemoryUnavailable("Mem0 is still processing the preference. Please try again shortly.")
 
     async def delete(self, user_id: str, memory_id: str) -> None:
         memories = await self.list_memories(user_id)
@@ -61,6 +84,13 @@ class Mem0Memory:
                 params={"delete_linked": "true"},
             )
         self._raise(response)
+        # Mem0 deletion can take a moment to become visible through the V3 list API.
+        # Do not report success until the memory is actually gone.
+        for _ in range(20):
+            if memory_id not in {str(item.get("id")) for item in await self.list_memories(user_id)}:
+                return
+            await asyncio.sleep(0.5)
+        raise MemoryUnavailable("Mem0 accepted the deletion but the preference is still visible. Please retry.")
 
     async def delete_all(self, user_id: str) -> None:
         async with httpx.AsyncClient(timeout=15) as client:

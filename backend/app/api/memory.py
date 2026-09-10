@@ -59,7 +59,7 @@ async def set_consent(payload: ConsentRequest, user: CurrentUser = Depends(get_c
     return {"consent": payload.enabled, "configured": service.enabled, "memories": []}
 
 
-@router.post("/preferences", status_code=202)
+@router.post("/preferences", status_code=201)
 async def add_preference(payload: PreferenceRequest, user: CurrentUser = Depends(get_current_user)):
     if not await consent_for(user.id):
         raise HTTPException(status_code=403, detail="Enable preference memory before saving a preference.")
@@ -67,7 +67,7 @@ async def add_preference(payload: PreferenceRequest, user: CurrentUser = Depends
         result = await Mem0Memory().add(user.id, payload.preference.strip())
     except MemoryUnavailable as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    return {"accepted": True, "eventId": result.get("event_id"), "status": result.get("status")}
+    return {"accepted": True, "eventId": result.get("event_id"), "status": "SUCCEEDED"}
 
 
 @router.delete("/preferences/{memory_id}", status_code=204)
