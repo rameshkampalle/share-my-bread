@@ -21,7 +21,7 @@ class Mem0Memory:
             raise MemoryUnavailable("Preference memory is not configured.")
         return {"Authorization": f"Token {self.api_key}", "Content-Type": "application/json"}
 
-    async def list(self, user_id: str) -> list[dict]:
+    async def list_memories(self, user_id: str) -> list[dict]:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(
                 f"{self.base_url}/v3/memories/?page=1&page_size=50", headers=self._headers(),
@@ -51,7 +51,7 @@ class Mem0Memory:
         return response.json()
 
     async def delete(self, user_id: str, memory_id: str) -> None:
-        memories = await self.list(user_id)
+        memories = await self.list_memories(user_id)
         if memory_id not in {str(item.get("id")) for item in memories}:
             raise KeyError(memory_id)
         async with httpx.AsyncClient(timeout=15) as client:

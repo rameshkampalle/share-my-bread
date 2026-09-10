@@ -33,7 +33,7 @@ async def memory_status(user: CurrentUser = Depends(get_current_user)):
     memories, error = [], None
     if consent and service.enabled:
         try:
-            memories = await service.list(user.id)
+            memories = await service.list_memories(user.id)
         except MemoryUnavailable as exc:
             error = str(exc)
     return {"consent": consent, "configured": service.enabled, "memories": memories, "error": error}
