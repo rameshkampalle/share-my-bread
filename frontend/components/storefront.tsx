@@ -431,8 +431,13 @@ export function Storefront() {
   }
 
   async function deletePreference(id: string) {
-    setMemoryBusy(true);
-    try { await backend(`/api/memory/preferences/${id}`, { method: "DELETE" }); await refreshMemory(); }
+    setMemoryBusy(true); setMemoryNotice("Forgetting preference…");
+    try {
+      await backend(`/api/memory/preferences/${id}`, { method: "DELETE" });
+      setMemory((current) => current ? { ...current, memories: current.memories.filter((item) => item.id !== id) } : current);
+      setMemoryNotice("Preference forgotten.");
+      window.setTimeout(() => void refreshMemory(), 2500);
+    }
     catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be deleted."); }
     finally { setMemoryBusy(false); }
   }
@@ -677,7 +682,7 @@ export function Storefront() {
               {!memory?.configured && <p>Memory is not enabled on the server yet.</p>}
               {memory?.consent && <>
                 <div className="memory-add"><input value={preference} maxLength={240} onChange={(event) => setPreference(event.target.value)} placeholder="e.g. I prefer vegan milk" /><button type="button" disabled={memoryBusy || preference.trim().length < 3} onClick={() => void savePreference()}>Remember</button></div>
-                {!!memory.memories.length && <ul>{memory.memories.map((item) => <li key={item.id}><span>{item.memory}</span><button type="button" disabled={memoryBusy} onClick={() => void deletePreference(item.id)}>Forget</button></li>)}</ul>}
+                {!!memory.memories.length && <ul>{memory.memories.map((item) => <li key={item.id}><span>{item.memory}</span><button type="button" disabled={memoryBusy} onClick={() => void deletePreference(item.id)}>{memoryBusy ? "Working…" : "Forget"}</button></li>)}</ul>}
               </>}
               {memoryNotice && <p role="status">{memoryNotice}</p>}
               <small>Only explicit grocery preferences are stored. Cart, payment, stock and audio are never sent to memory.</small>
