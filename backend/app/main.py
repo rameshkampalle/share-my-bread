@@ -12,6 +12,7 @@ from app.api.journey import router as journey_router
 from app.api.workspace import router as workspace_router
 from app.api.notifications import router as notifications_router
 from app.api.operations import router as operations_router
+from app.api.memory import router as memory_router
 
 settings = get_settings()
 logger = logging.getLogger("share_my_bread")
@@ -21,6 +22,7 @@ app.include_router(journey_router)
 app.include_router(workspace_router)
 app.include_router(notifications_router)
 app.include_router(operations_router)
+app.include_router(memory_router)
 
 if settings.allowed_origins:
     app.add_middleware(
@@ -65,5 +67,6 @@ async def health():
             "semanticSearch": settings.semantic_search_enabled,
             "retailerMode": settings.retailer_integration_mode,
             "paymentMode": settings.payment_mode,
+            "preferenceMemory": settings.mem0_enabled and bool(settings.mem0_api_key),
         },
     }

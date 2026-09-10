@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     n8n_agent_webhook_url: str | None = None
     n8n_event_webhook_url: str | None = None
     n8n_webhook_secret: str | None = Field(default=None, repr=False)
+    mem0_api_key: str | None = Field(default=None, repr=False)
+    mem0_enabled: bool = False
     ai_assistant_enabled: bool = True
     semantic_search_enabled: bool = True
     dev_fulfilment_mode: bool = True

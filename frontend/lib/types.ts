@@ -92,6 +92,13 @@ export type NotificationFeed = {
   items: Array<{ id: string; notification_type: string; title: string; message: string; aggregate_id: string | null; read_at: string | null; created_at: string }>;
 };
 
+export type MemoryStatus = {
+  consent: boolean;
+  configured: boolean;
+  memories: Array<{ id: string; memory: string; created_at?: string }>;
+  error?: string | null;
+};
+
 export type AssistantResponse = {
   responseType:
     | "ANSWER"

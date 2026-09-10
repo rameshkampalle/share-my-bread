@@ -5,7 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { AssistantResponse, Cart, InventoryRow, Journey, NotificationFeed, OrderHistoryItem, Product, Workspace } from "@/lib/types";
+import type { AssistantResponse, Cart, InventoryRow, Journey, MemoryStatus, NotificationFeed, OrderHistoryItem, Product, Workspace } from "@/lib/types";
 
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
@@ -78,6 +78,10 @@ export function Storefront() {
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
   const [listening, setListening] = useState(false);
+  const [memory, setMemory] = useState<MemoryStatus | null>(null);
+  const [preference, setPreference] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [memoryNotice, setMemoryNotice] = useState("");
   const [decision, setDecision] = useState<"accepted" | "declined" | null>(null);
   const [selectedProposalIds, setSelectedProposalIds] = useState<string[]>([]);
   const [proposalQuantities, setProposalQuantities] = useState<Record<string, number>>({});
@@ -378,7 +382,7 @@ export function Storefront() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         signal: AbortSignal.timeout(35000),
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({
           message: assistantQuery.trim(),
           userId: session?.user.id,
@@ -396,6 +400,38 @@ export function Storefront() {
     } finally {
       setAsking(false);
     }
+  }
+
+  async function refreshMemory() {
+    try { setMemory(await backend("/api/memory") as MemoryStatus); } catch { setMemory(null); }
+  }
+
+  async function toggleMemory(enabled: boolean) {
+    setMemoryBusy(true); setMemoryNotice("");
+    try {
+      await backend("/api/memory/consent", { method: "POST", body: JSON.stringify({ enabled }) });
+      await refreshMemory();
+      setMemoryNotice(enabled ? "Preference memory enabled." : "Preference memory disabled and erased.");
+    } catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Memory update failed."); }
+    finally { setMemoryBusy(false); }
+  }
+
+  async function savePreference() {
+    if (!preference.trim()) return;
+    setMemoryBusy(true); setMemoryNotice("");
+    try {
+      await backend("/api/memory/preferences", { method: "POST", body: JSON.stringify({ preference: preference.trim() }) });
+      setPreference(""); setMemoryNotice("Preference accepted. It may take a few seconds to appear.");
+      window.setTimeout(() => void refreshMemory(), 2500);
+    } catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be saved."); }
+    finally { setMemoryBusy(false); }
+  }
+
+  async function deletePreference(id: string) {
+    setMemoryBusy(true);
+    try { await backend(`/api/memory/preferences/${id}`, { method: "DELETE" }); await refreshMemory(); }
+    catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be deleted."); }
+    finally { setMemoryBusy(false); }
   }
 
   async function confirmProposal() {
@@ -529,7 +565,7 @@ export function Storefront() {
         <nav aria-label="Primary navigation">
           <a className="active" href="#inventory">Inventory</a>
           <button onClick={() => void openOrderHistory()}>{workspace.profile.app_role === "ADMIN" ? "Orders & delivery" : "Orders"}</button>
-          <button onClick={() => setAssistantOpen(true)}>AI assistant</button>
+          <button onClick={() => { setAssistantOpen(true); void refreshMemory(); }}>AI assistant</button>
         </nav>
         <div className="member-menu">
           <span className="avatar">{session.user.email?.charAt(0).toUpperCase()}</span>
@@ -552,7 +588,7 @@ export function Storefront() {
           <h1>What shall we share today?</h1>
           <p>Thirty pantry essentials, one transparent inventory, and a smarter way to shop together.</p>
         </div>
-        <button className="assistant-button" onClick={() => setAssistantOpen(true)}><span>✦</span> Ask the shopping assistant</button>
+        <button className="assistant-button" onClick={() => { setAssistantOpen(true); void refreshMemory(); }}><span>✦</span> Ask the shopping assistant</button>
       </section>
 
       <section className="group-dashboard" aria-label="Current group and order cycle">
@@ -615,7 +651,7 @@ export function Storefront() {
         </div>
       </section>
 
-      <button className="assistant-fab" onClick={() => setAssistantOpen(true)} aria-label="Open AI shopping assistant">✦</button>
+      <button className="assistant-fab" onClick={() => { setAssistantOpen(true); void refreshMemory(); }} aria-label="Open AI shopping assistant">✦</button>
 
       {cartOpen && <CartDrawer cart={cart} journey={journey} busy={mutating} error={journeyError || cartError} notice={journeyNotice} onClose={() => setCartOpen(false)} onQuantity={updateQuantity} onRemove={removeLine} onAction={journeyAction} />}
       {ordersOpen && <OrdersDrawer orders={orders} loading={ordersLoading} busy={mutating} error={ordersError} isAdmin={workspace.profile.app_role === "ADMIN"} onClose={() => setOrdersOpen(false)} onAction={historyAction} />}
@@ -625,6 +661,16 @@ export function Storefront() {
           <aside className="assistant-drawer" aria-label="AI shopping assistant" onMouseDown={(e) => e.stopPropagation()}>
             <div className="drawer-head"><div><p className="eyebrow">Gemini + Pinecone</p><h2>Shopping assistant</h2></div><button onClick={() => setAssistantOpen(false)} aria-label="Close">×</button></div>
             <p className="assistant-intro">Ask naturally. I can understand regional product names and prepare a proposal for you to approve.</p>
+            <section className="memory-panel">
+              <div><strong>Personal preferences (Mem0)</strong><label><input type="checkbox" checked={memory?.consent ?? false} disabled={memoryBusy || !memory?.configured} onChange={(event) => void toggleMemory(event.target.checked)} /> Remember mine</label></div>
+              {!memory?.configured && <p>Memory is not enabled on the server yet.</p>}
+              {memory?.consent && <>
+                <div className="memory-add"><input value={preference} maxLength={240} onChange={(event) => setPreference(event.target.value)} placeholder="e.g. I prefer vegan milk" /><button type="button" disabled={memoryBusy || preference.trim().length < 3} onClick={() => void savePreference()}>Remember</button></div>
+                {!!memory.memories.length && <ul>{memory.memories.map((item) => <li key={item.id}><span>{item.memory}</span><button type="button" disabled={memoryBusy} onClick={() => void deletePreference(item.id)}>Forget</button></li>)}</ul>}
+              </>}
+              {memoryNotice && <p role="status">{memoryNotice}</p>}
+              <small>Only explicit grocery preferences are stored. Cart, payment, stock and audio are never sent to memory.</small>
+            </section>
             <div className="suggestions">
               {["Add two tubs of curd for raita", "Find a vegan milk for coffee", "What can I use for rajma?"].map((item) => <button key={item} onClick={() => setAssistantQuery(item)}>{item}</button>)}
             </div>
