@@ -52,6 +52,12 @@ class MemoryServiceTests(unittest.IsolatedAsyncioTestCase):
             result = await self.service().add("user-1", "oat milk")
         self.assertEqual(result["status"], "SUCCEEDED")
 
+    async def test_add_accepts_synchronous_non_inferred_result(self):
+        client = FakeClient(post=[FakeResponse(200, {"status": "SUCCEEDED", "results": [{"id": "memory-1"}]})])
+        with patch("app.services.memory.httpx.AsyncClient", return_value=client):
+            result = await self.service().add("user-1", "oat milk")
+        self.assertEqual(result["results"][0]["id"], "memory-1")
+
     async def test_add_surfaces_failed_mem0_event(self):
         clients = [
             FakeClient(post=[FakeResponse(202, {"event_id": "evt-2", "status": "PENDING"})]),

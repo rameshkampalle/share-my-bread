@@ -43,7 +43,8 @@ flowchart TD
 
 | ID | Severity | Production behavior | Root cause | Fix status |
 |---|---:|---|---|---|
-| RC3-01 | High | “Preference accepted” appeared, but no memory/Forget button appeared and `milk` still returned every milk | Mem0 V3 add returns an asynchronous event; the backend treated `PENDING` as saved | Fixed locally: poll the Mem0 event to `SUCCEEDED`, then refresh memory before success is shown |
+| RC3-01 | High | “Preference accepted” appeared, but no memory/Forget button appeared and `milk` still returned every milk | Mem0 V3 add returns an asynchronous event; the backend treated `PENDING` as saved | Fixed locally: explicit preferences use synchronous non-inferred storage; event polling remains as a compatibility fallback |
+| RC3-03 | High | A deployed fresh preference save ended with `signal timed out` | Waiting for the remote extraction pipeline inside one browser request can exceed the UI deadline | Fixed locally: explicit preference text now bypasses extraction with `infer=false`, which Mem0 processes synchronously |
 | RC3-02 | Medium | The new `OPEN` cycle contained Retail User 3's previously pending lines (€5.47) | Automatic rollover copied `ROLLED_FORWARD` lines into the new cart | Fixed locally: create a clean empty cycle while retaining old-cycle audit/history |
 
 ## Required post-deployment regression
@@ -75,4 +76,4 @@ Then finish one short order and verify the automatically created `OPEN` cycle st
 - Frontend production build and TypeScript: pass.
 - Backend compile: pass.
 - Existing backend policy suite: six tests passed in the project virtual environment.
-- Three new Mem0 service regression tests cover pending → succeeded, failed events, and missing event IDs; run them in the project virtual environment after applying this patch.
+- Four new Mem0 service regression tests cover synchronous explicit storage, pending → succeeded, failed events, and missing event IDs; run them in the project virtual environment after applying this patch.

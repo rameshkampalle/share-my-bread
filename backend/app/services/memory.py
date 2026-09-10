@@ -48,10 +48,15 @@ class Mem0Memory:
                 f"{self.base_url}/v3/memories/add/", headers=self._headers(),
                 json={"messages": [{"role": "user", "content": f"My grocery preference is: {preference}"}],
                       "user_id": scoped_user_id(user_id),
+                      # The user has already supplied an explicit fact. Store it directly so the
+                      # request is deterministic and does not depend on Mem0's extraction queue.
+                      "infer": False,
                       "metadata": {"application": "share-my-bread", "kind": "grocery_preference"}},
             )
         self._raise(response)
         result = response.json()
+        if str(result.get("status", "")).upper() == "SUCCEEDED":
+            return result
         event_id = result.get("event_id")
         if not event_id:
             raise MemoryUnavailable("Mem0 did not return a tracking event for the preference.")
