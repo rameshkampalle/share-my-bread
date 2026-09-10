@@ -5,12 +5,22 @@ import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { AssistantResponse, Cart, InventoryRow, Journey, OrderHistoryItem, Product, Workspace } from "@/lib/types";
+import type { AssistantResponse, Cart, InventoryRow, Journey, NotificationFeed, OrderHistoryItem, Product, Workspace } from "@/lib/types";
 
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
   currency: "EUR",
 });
+
+type BrowserSpeechRecognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void;
+  onerror: () => void;
+  onend: () => void;
+  start: () => void;
+};
 
 function inventoryFor(product: Product): InventoryRow | null {
   if (Array.isArray(product.inventory)) return product.inventory[0] ?? null;
@@ -57,6 +67,8 @@ export function Storefront() {
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
+  const [notifications, setNotifications] = useState<NotificationFeed>({ unread: 0, items: [] });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const rolloverStarted = useRef(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -65,6 +77,7 @@ export function Storefront() {
   const [assistantResult, setAssistantResult] = useState<AssistantResponse | null>(null);
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
+  const [listening, setListening] = useState(false);
   const [decision, setDecision] = useState<"accepted" | "declined" | null>(null);
   const [selectedProposalIds, setSelectedProposalIds] = useState<string[]>([]);
   const [proposalQuantities, setProposalQuantities] = useState<Record<string, number>>({});
@@ -112,6 +125,14 @@ export function Storefront() {
       setWorkspace(await backend("/api/workspace/me") as Workspace);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Workspace unavailable.");
+    }
+  }, [backend]);
+
+  const refreshNotifications = useCallback(async () => {
+    try {
+      setNotifications(await backend("/api/notifications") as NotificationFeed);
+    } catch {
+      // Notifications are supplementary; the cart remains usable if this read fails.
     }
   }, [backend]);
 
@@ -175,12 +196,42 @@ export function Storefront() {
 
     void loadProducts();
     void refreshWorkspace();
-  }, [session, refreshWorkspace]);
+    void refreshNotifications();
+  }, [session, refreshNotifications, refreshWorkspace]);
+
+  async function readAllNotifications() {
+    await backend("/api/notifications/read-all", { method: "POST" });
+    await refreshNotifications();
+  }
+
+  async function resetDemoWorkspace() {
+    if (!window.confirm("Reset the unfinished demo journey and open a clean cart? Completed order history will remain.")) return;
+    setMutating(true);
+    setJourneyError("");
+    try {
+      await backend("/api/operations/demo-reset", { method: "POST", body: JSON.stringify({ confirmation: "RESET DEMO WORKSPACE" }) });
+      rolloverStarted.current = false;
+      await Promise.all([refreshWorkspace(), refreshOrder(), openOrderHistory()]);
+      setJourneyNotice("Demo workspace reset. A clean seven-day order cycle is open.");
+    } catch (error) {
+      setJourneyError(error instanceof Error ? error.message : "Demo reset failed.");
+    } finally {
+      setMutating(false);
+    }
+  }
 
   useEffect(() => {
     if (!session || !workspace?.groups.length) return;
     void refreshOrder();
   }, [session,workspace?.groups.length,refreshOrder]);
+
+  useEffect(() => {
+    if (!session || !workspace?.groups.length) return;
+    const refreshSharedState = window.setInterval(() => {
+      void Promise.all([refreshOrder(), refreshWorkspace(), refreshNotifications()]);
+    }, 30000);
+    return () => window.clearInterval(refreshSharedState);
+  }, [session, workspace?.groups.length, refreshNotifications, refreshOrder, refreshWorkspace]);
 
   useEffect(() => {
     if (journey?.order?.status !== "FULFILLED" || rolloverStarted.current) return;
@@ -204,7 +255,7 @@ export function Storefront() {
       const value = await backend(path, init);
       setCart(value as Cart);
       setJourneyNotice(notice);
-      await refreshJourney();
+      await Promise.all([refreshJourney(), refreshWorkspace()]);
     } catch (error) {
       setJourneyError(error instanceof Error ? error.message : "Cart update failed.");
     } finally {
@@ -242,8 +293,8 @@ export function Storefront() {
         "/api/journey/fulfilment": "Order status updated.",
       };
       setJourneyNotice(messages[path] ?? "Order updated.");
-      await refreshOrder();
-      if (path === "/api/journey/fulfilment" && body && "status" in body && body.status === "FULFILLED") {
+      await Promise.all([refreshOrder(), refreshWorkspace(), refreshNotifications()]);
+      if (path === "/api/journey/fulfilment" && body && "status" in body && ["FULFILLED", "CANCELLED"].includes(String(body.status))) {
         setCartOpen(false);
         await openOrderHistory();
       }
@@ -406,6 +457,28 @@ export function Storefront() {
     setDecision(null);
   }
 
+  function startVoiceInput() {
+    const browserWindow = window as unknown as {
+      SpeechRecognition?: new () => BrowserSpeechRecognition;
+      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    };
+    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setAssistantError("Voice input is not supported by this browser. You can still type the request.");
+      return;
+    }
+    setAssistantError("");
+    setListening(true);
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || "en-GB";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => setAssistantQuery(event.results[0]?.[0]?.transcript ?? "");
+    recognition.onerror = () => setAssistantError("Voice input could not be captured. Please try again or type the request.");
+    recognition.onend = () => setListening(false);
+    recognition.start();
+  }
+
   if (!authReady) {
     return <main className="center-stage"><div className="loader" aria-label="Loading" /></main>;
   }
@@ -446,6 +519,9 @@ export function Storefront() {
     return <main className="login-page"><section className="login-story"><a className="brand brand-light" href="#">Share My Bread<span>.</span></a><div><p className="eyebrow">Shared ordering starts here</p><h1>Create or join<br />a buying group.</h1><p className="story-copy">A coordinator creates the group, cutoff and pickup point. Other members join using its code.</p></div></section><section className="login-panel"><div className="login-card"><p className="eyebrow ink">Group setup</p><h2>Hello, {workspace.profile.display_name}</h2><label>New group name<input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Neighbourhood pantry" /></label><label>Join code<input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} placeholder="BREAD2026" /></label><label>Order cutoff<input type="datetime-local" value={cutoffAt} onChange={(e) => setCutoffAt(e.target.value)} /></label><label>Pickup point<input value={pickupLabel} onChange={(e) => setPickupLabel(e.target.value)} /></label><label>Pickup address<input value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)} /></label>{workspaceError && <p className="error-banner">{workspaceError}</p>}<button className="primary-button" disabled={groupName.length < 2 || joinCode.length < 6 || !cutoffAt} onClick={() => void groupAction("/api/groups",{ name:groupName,joinCode,pickupLabel,pickupAddress,cutoffAt:new Date(cutoffAt).toISOString() })}>Create group<span>→</span></button><button className="secondary-button" disabled={joinCode.length < 6} onClick={() => void groupAction("/api/groups/join",{ joinCode })}>Join existing group</button><button className="secondary-button" onClick={() => getSupabaseBrowserClient().auth.signOut()}>Sign out</button></div></section></main>;
   }
 
+  const activeGroup = workspace.groups[0];
+  const pendingMembers = activeGroup.members.filter((member) => member.decision === "PENDING").length;
+
   return (
     <main>
       <header className="topbar">
@@ -458,10 +534,17 @@ export function Storefront() {
         <div className="member-menu">
           <span className="avatar">{session.user.email?.charAt(0).toUpperCase()}</span>
           <div><strong>{workspace.profile.display_name}</strong><small>{workspace.profile.app_role} · {session.user.email}</small></div>
+          <button className="notification-button" onClick={() => setNotificationsOpen((open) => !open)} aria-label={`${notifications.unread} unread notifications`}>●<span>{notifications.unread}</span></button>
           <button className="cart-pill" onClick={() => setCartOpen(true)}>{cart?.lines.length ?? 0} cart items · {money.format(cart?.subtotal ?? 0)}</button>
           <button onClick={() => getSupabaseBrowserClient().auth.signOut()}>Sign out</button>
         </div>
       </header>
+
+      {notificationsOpen && <aside className="notification-panel" aria-label="Notifications">
+        <div><h2>Notifications</h2><button disabled={!notifications.unread} onClick={() => void readAllNotifications()}>Mark all read</button></div>
+        {!notifications.items.length && <p>No notifications yet.</p>}
+        {notifications.items.map((item) => <article key={item.id} className={item.read_at ? "read" : "unread"}><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.created_at).toLocaleString()}</small></article>)}
+      </aside>}
 
       <section className="intro" id="top">
         <div>
@@ -470,6 +553,25 @@ export function Storefront() {
           <p>Thirty pantry essentials, one transparent inventory, and a smarter way to shop together.</p>
         </div>
         <button className="assistant-button" onClick={() => setAssistantOpen(true)}><span>✦</span> Ask the shopping assistant</button>
+      </section>
+
+      <section className="group-dashboard" aria-label="Current group and order cycle">
+        <div className="group-dashboard-title">
+          <div><p className="eyebrow ink">Active buying group</p><h2>{activeGroup.name}</h2></div>
+          <span className={`cycle-status cycle-${(activeGroup.cycle?.status ?? "none").toLowerCase()}`}>{activeGroup.cycle?.status.replaceAll("_", " ") ?? "NO CYCLE"}</span>
+        </div>
+        <dl className="group-facts">
+          <div><dt>Your group role</dt><dd>{activeGroup.member_role}</dd></div>
+          <div><dt>Join code</dt><dd>{activeGroup.join_code}</dd></div>
+          <div><dt>Cutoff</dt><dd>{activeGroup.cycle ? new Date(activeGroup.cycle.cutoff_at).toLocaleString() : "Not scheduled"}</dd></div>
+          <div><dt>Pickup</dt><dd>{activeGroup.pickup_label ?? "Not configured"}<small>{activeGroup.pickup_address}</small></dd></div>
+        </dl>
+        <div className="group-member-summary">
+          <strong>{activeGroup.members.length} members</strong>
+          <span>{pendingMembers} pending decision{pendingMembers === 1 ? "" : "s"}</span>
+          <div className="member-chips">{activeGroup.members.map((member) => <span key={member.id} title={`${member.member_role} · ${member.app_role}`} className={`decision-${member.decision.toLowerCase()}`}>{member.display_name}<small>{member.decision}</small></span>)}</div>
+          {workspace.profile.app_role === "ADMIN" && <button className="reset-demo-button" disabled={mutating} onClick={() => void resetDemoWorkspace()}>Reset unfinished demo</button>}
+        </div>
       </section>
 
       <button className="cart-strip" id="cart" onClick={() => setCartOpen(true)}>
@@ -528,6 +630,7 @@ export function Storefront() {
             </div>
             <form className="assistant-form" onSubmit={askAssistant}>
               <textarea value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
+              <button className="voice-button" type="button" disabled={listening || asking} onClick={startVoiceInput}>{listening ? "Listening…" : "🎙 Speak request"}</button>
               <button className="primary-button" disabled={asking}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
             </form>
             {assistantError && <p className="error-banner" role="alert">{assistantError}</p>}

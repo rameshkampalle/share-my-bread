@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-09-08",
-  "workflowCount": 8,
+  "workflowCount": 9,
   "index": "enterprise-architecture-rag",
   "namespace": "share-my-bread-demo",
   "embeddingModel": "gemini-embedding-001",
@@ -13,6 +13,7 @@
     "SMB-TOL-003-Create-Proposal.json",
     "SMB-AGT-001-Assistant.json",
     "SMB-EVT-001-Fulfilment-Notification.json",
+    "SMB-SCH-001-Cutoff-Orchestrator.json",
     "SMB-ERR-001-Error-Handler.json"
   ],
   "secretsEmbedded": false

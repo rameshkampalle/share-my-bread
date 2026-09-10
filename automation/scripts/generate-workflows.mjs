@@ -41,6 +41,15 @@ const manual = (id, x = -700, y = 0) => node(
   [x, y],
 );
 
+const schedule = (id, x = -700, y = 0) => node(
+  id,
+  'Every five minutes',
+  'n8n-nodes-base.scheduleTrigger',
+  1.2,
+  [x, y],
+  { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
+);
+
 const webhook = (id, name, path, x = -700, y = 0) => node(
   id,
   name,
@@ -355,6 +364,28 @@ files.set('SMB-EVT-001-Fulfilment-Notification.json', workflow(
     'Fulfilment Event Webhook': { main: [[{ node: 'Validate and Format Event', type: 'main', index: 0 }]] },
     'Validate and Format Event': { main: [[{ node: 'Return Notification Envelope', type: 'main', index: 0 }]] },
     'Return Notification Envelope': { main: [[{ node: 'Respond to Webhook', type: 'main', index: 0 }]] },
+  },
+));
+
+files.set('SMB-SCH-001-Cutoff-Orchestrator.json', workflow(
+  'SMB-SCH-001-Cutoff-Orchestrator',
+  [
+    schedule('71000000-0000-4000-8000-000000000001'),
+    node('71000000-0000-4000-8000-000000000002', 'Run Reminder and Cutoff Tick', 'n8n-nodes-base.httpRequest', 4.2, [-360, 0], {
+      method: 'POST',
+      url: 'https://share-my-bread.onrender.com/api/operations/tick',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      options: { timeout: 120000 },
+    }),
+    code('71000000-0000-4000-8000-000000000003', 'Summarize Tick', -40, 0,
+      "return [{ json: { completedAt: new Date().toISOString(), remindersCreated: Number($json.remindersCreated || 0), cyclesClosed: $json.cyclesClosed || [], failures: $json.failures || [] } }];"),
+    sticky('71000000-0000-4000-8000-000000000004',
+      '## Required before activation\nCreate an n8n **Header Auth** credential named `SMB - Backend Scheduler`: Header Name `X-Webhook-Secret`, Header Value equal to Render `N8N_WEBHOOK_SECRET`. Select it on the HTTP node, test once manually, then activate. The backend deduplicates reminders and skips cycles already closed.', -760, -330, 620, 250),
+  ],
+  {
+    'Every five minutes': { main: [[{ node: 'Run Reminder and Cutoff Tick', type: 'main', index: 0 }]] },
+    'Run Reminder and Cutoff Tick': { main: [[{ node: 'Summarize Tick', type: 'main', index: 0 }]] },
   },
 ));
 

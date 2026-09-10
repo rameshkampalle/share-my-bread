@@ -8,7 +8,7 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 from app.api.cart import connect_database
-from app.domain.order_policy import can_close_cycle, can_transition_fulfilment
+from app.domain.order_policy import can_cancel_order, can_close_cycle, can_transition_fulfilment
 from app.shared.access import get_access_profile, require_delivery_operator, require_shopper
 from app.shared.auth import CurrentUser, get_current_user
 from app.shared.config import get_settings
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/journey", tags=["order journey"])
 class FulfilmentRequest(BaseModel):
     status: Literal["PREPARING", "READY_FOR_PICKUP", "FULFILLED", "CANCELLED"]
     orderId: uuid.UUID | None = None
+    reason: str | None = None
 
 
 class CollectCashRequest(BaseModel):
@@ -89,6 +90,20 @@ async def add_audit(cursor, user_id: str, action: str, entity_type: str, entity_
         [correlation_id, user_id, action, entity_type, entity_id, json.dumps(after, default=str)],
     )
     return correlation_id
+
+
+async def notify_group(cursor, group_id, notification_type: str, title: str, message: str, aggregate_id):
+    """Create one retry-safe in-app notification per active group member."""
+    dedupe_prefix=f"{notification_type.lower()}:{aggregate_id}"
+    await cursor.execute(
+        """insert into public.notifications
+           (user_id,notification_type,title,message,aggregate_id,dedupe_key)
+           select gm.user_id,%s,%s,%s,%s,%s||':'||gm.user_id::text
+           from public.group_members gm join public.profiles p on p.id=gm.user_id
+           where gm.group_id=%s and p.status='ACTIVE'
+           on conflict (dedupe_key) do nothing""",
+        [notification_type,title,message,aggregate_id,dedupe_prefix,group_id],
+    )
 
 
 async def read_journey(connection, user_id: str):
@@ -489,6 +504,7 @@ async def finalize_order(user: CurrentUser = Depends(get_current_user)):
                         values ('ORDER_PLACED',%s,%s,%s::jsonb)""",
                         [order["id"], correlation_id, json.dumps({"mode": "mock"})],
                     )
+                    await notify_group(cursor,cycle["group_id"],"ORDER_PLACED","Shared order placed",f"Order {order['id']} was accepted by the mock retailer.",order["id"])
         return await read_journey(connection, user.id)
 
 
@@ -604,6 +620,31 @@ async def update_fulfilment(payload: FulfilmentRequest, user: CurrentUser = Depe
                 if not order or not can_transition_fulfilment(order["status"],payload.status):
                     current = order["status"] if order else "NO_ORDER"
                     raise HTTPException(status_code=409, detail=f"Transition {current} → {payload.status} is not allowed.")
+                if payload.status == "CANCELLED":
+                    reason=(payload.reason or "").strip()
+                    if len(reason)<5:
+                        raise HTTPException(status_code=422,detail="A cancellation reason of at least five characters is required.")
+                    await cursor.execute(
+                        "select count(*) as collected from public.cash_obligations where order_id=%s and amount_collected>0",
+                        [order["id"]],
+                    )
+                    cash_collected=(await cursor.fetchone())["collected"]
+                    await cursor.execute("select count(*) as collected from public.item_collection_records where order_id=%s",[order["id"]])
+                    items_collected=(await cursor.fetchone())["collected"]
+                    if not can_cancel_order(order_status=order["status"],cash_collections=cash_collected,item_collections=items_collected):
+                        raise HTTPException(status_code=409,detail="An order with recorded cash or item collection requires a support correction, not cancellation.")
+                    await cursor.execute(
+                        """select product_id,sum(quantity)::int as quantity from public.order_lines
+                           where order_id=%s group by product_id""",
+                        [order["id"]],
+                    )
+                    for stock in await cursor.fetchall():
+                        await cursor.execute(
+                            "update public.inventory set available_quantity=available_quantity+%s where product_id=%s",
+                            [stock["quantity"],stock["product_id"]],
+                        )
+                    await cursor.execute("update public.cash_obligations set status='CANCELLED' where order_id=%s",[order["id"]])
+                    await cursor.execute("update public.order_cycles set status='CANCELLED',version=version+1 where id=%s",[order["cycle_id"]])
                 if payload.status == "FULFILLED":
                     await cursor.execute("update public.order_cycles set status='CLOSED',version=version+1 where id=%s",[order["cycle_id"]])
                     await cursor.execute(
@@ -623,16 +664,24 @@ async def update_fulfilment(payload: FulfilmentRequest, user: CurrentUser = Depe
                 await cursor.execute("update public.orders set status=%s,version=version+1 where id=%s", [payload.status, order["id"]])
                 await cursor.execute(
                     """insert into public.fulfilment_events (order_id,old_status,new_status,actor_id,source,note)
-                    values (%s,%s,%s,%s,'ADMIN_UI','Demo fulfilment control')""",
-                    [order["id"], order["status"], payload.status, user.id],
+                    values (%s,%s,%s,%s,'ADMIN_UI',%s)""",
+                    [order["id"], order["status"], payload.status, user.id, (payload.reason or "Demo fulfilment control").strip()],
                 )
-                correlation_id=await add_audit(cursor, user.id, f"ORDER_{payload.status}", "ORDER", order["id"], {"from": order["status"], "to": payload.status})
+                correlation_id=await add_audit(cursor, user.id, f"ORDER_{payload.status}", "ORDER", order["id"], {"from": order["status"], "to": payload.status, "reason": payload.reason})
                 await cursor.execute(
                     """insert into public.outbox_events (event_type,aggregate_id,correlation_id,payload)
                        values (%s,%s,%s,%s::jsonb)""",
                     [f"ORDER_{payload.status}",order["id"],correlation_id,json.dumps({"oldStatus":order["status"],"newStatus":payload.status})],
                 )
-                if payload.status == "FULFILLED":
+                notification_messages={
+                    "PREPARING":("Order preparation started","The retailer is preparing your shared order."),
+                    "READY_FOR_PICKUP":("Order ready for pickup","Your shared order is ready at the configured pickup point."),
+                    "FULFILLED":("Order fulfilled","All cash and item-collection obligations are complete."),
+                    "CANCELLED":("Order cancelled",f"The shared order was cancelled. Reason: {(payload.reason or '').strip()}"),
+                }
+                title,message=notification_messages[payload.status]
+                await notify_group(cursor,order["group_id"],f"ORDER_{payload.status}",title,message,order["id"])
+                if payload.status in ("FULFILLED","CANCELLED"):
                     await cursor.execute(
                         "select id from public.order_cycles where group_id=%s and status='OPEN' limit 1",
                         [order["group_id"]],

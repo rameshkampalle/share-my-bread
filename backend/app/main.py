@@ -10,6 +10,8 @@ from app.shared.config import get_settings
 from app.api.cart import router as cart_router
 from app.api.journey import router as journey_router
 from app.api.workspace import router as workspace_router
+from app.api.notifications import router as notifications_router
+from app.api.operations import router as operations_router
 
 settings = get_settings()
 logger = logging.getLogger("share_my_bread")
@@ -17,6 +19,8 @@ app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.include_router(cart_router)
 app.include_router(journey_router)
 app.include_router(workspace_router)
+app.include_router(notifications_router)
+app.include_router(operations_router)
 
 if settings.allowed_origins:
     app.add_middleware(

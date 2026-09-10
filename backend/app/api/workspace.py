@@ -38,6 +38,32 @@ async def workspace_payload(cursor, user_id: str):
         [user_id],
     )
     groups = await cursor.fetchall()
+    for group in groups:
+        await cursor.execute(
+            """select oc.id,oc.status,oc.cutoff_at,oc.version,oc.created_at,oc.updated_at,
+                      count(cl.id) filter (where cl.status='ACTIVE')::int as active_line_count
+               from public.order_cycles oc
+               left join public.cart_lines cl on cl.cycle_id=oc.id
+               where oc.group_id=%s
+               group by oc.id
+               order by case when oc.status in ('OPEN','REVIEW','AWAITING_COMMITMENT','FINALIZED') then 0 else 1 end,
+                        oc.updated_at desc
+               limit 1""",
+            [group["id"]],
+        )
+        group["cycle"] = await cursor.fetchone()
+        cycle_id = group["cycle"]["id"] if group["cycle"] else None
+        await cursor.execute(
+            """select p.id,p.display_name,p.app_role,gm.member_role,gm.reliability_state,gm.joined_at,
+                      coalesce(a.decision,'PENDING') as decision,a.decided_at
+               from public.group_members gm
+               join public.profiles p on p.id=gm.user_id
+               left join public.authorizations a on a.user_id=gm.user_id and a.cycle_id=%s
+               where gm.group_id=%s and p.status='ACTIVE'
+               order by case when gm.member_role='COORDINATOR' then 0 else 1 end,p.display_name""",
+            [cycle_id, group["id"]],
+        )
+        group["members"] = await cursor.fetchall()
     return {
         "profile": {
             "id": profile.user_id,

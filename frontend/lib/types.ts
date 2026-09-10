@@ -38,7 +38,18 @@ export type Cart = {
 
 export type Workspace = {
   profile: { id: string; display_name: string; app_role: "MEMBER" | "ADMIN"; can_shop: boolean; can_deliver: boolean };
-  groups: Array<{ id: string; name: string; join_code: string; member_role: "MEMBER" | "COORDINATOR"; coordinator_id: string; pickup_point_id: string | null; pickup_label: string | null; pickup_address: string | null }>;
+  groups: Array<{
+    id: string;
+    name: string;
+    join_code: string;
+    member_role: "MEMBER" | "COORDINATOR";
+    coordinator_id: string;
+    pickup_point_id: string | null;
+    pickup_label: string | null;
+    pickup_address: string | null;
+    cycle: { id: string; status: string; cutoff_at: string; version: number; active_line_count: number; created_at: string; updated_at: string } | null;
+    members: Array<{ id: string; display_name: string; app_role: "MEMBER" | "ADMIN"; member_role: "MEMBER" | "COORDINATOR"; reliability_state: string; joined_at: string; decision: string; decided_at: string | null }>;
+  }>;
 };
 
 export type Journey = {
@@ -74,6 +85,11 @@ export type OrderHistoryItem = {
   amount_collected: number | null;
   pending_item_collections: number;
   lines: Array<{ id: string; name: string; sku: string; unit: string; quantity: number; total: number }>;
+};
+
+export type NotificationFeed = {
+  unread: number;
+  items: Array<{ id: string; notification_type: string; title: string; message: string; aggregate_id: string | null; read_at: string | null; created_at: string }>;
 };
 
 export type AssistantResponse = {

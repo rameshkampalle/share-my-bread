@@ -1,0 +1,108 @@
+{
+  "name": "SMB-SCH-001-Cutoff-Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "71000000-0000-4000-8000-000000000001",
+      "name": "Every five minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://share-my-bread.onrender.com/api/operations/tick",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "71000000-0000-4000-8000-000000000002",
+      "name": "Run Reminder and Cutoff Tick",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { completedAt: new Date().toISOString(), remindersCreated: Number($json.remindersCreated || 0), cyclesClosed: $json.cyclesClosed || [], failures: $json.failures || [] } }];"
+      },
+      "id": "71000000-0000-4000-8000-000000000003",
+      "name": "Summarize Tick",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Required before activation\nCreate an n8n **Header Auth** credential named `SMB - Backend Scheduler`: Header Name `X-Webhook-Secret`, Header Value equal to Render `N8N_WEBHOOK_SECRET`. Select it on the HTTP node, test once manually, then activate. The backend deduplicates reminders and skips cycles already closed.",
+        "width": 620,
+        "height": 250,
+        "color": 5
+      },
+      "id": "71000000-0000-4000-8000-000000000004",
+      "name": "Note 004",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -330
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every five minutes": {
+      "main": [
+        [
+          {
+            "node": "Run Reminder and Cutoff Tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Reminder and Cutoff Tick": {
+      "main": [
+        [
+          {
+            "node": "Summarize Tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
