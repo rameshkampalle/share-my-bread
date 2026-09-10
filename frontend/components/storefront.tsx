@@ -81,12 +81,64 @@ export function Storefront() {
   const [listening, setListening] = useState(false);
   const voiceRecognition = useRef<BrowserSpeechRecognition | null>(null);
   const [memory, setMemory] = useState<MemoryStatus | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryError, setMemoryError] = useState("");
   const [preference, setPreference] = useState("");
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryNotice, setMemoryNotice] = useState("");
   const [decision, setDecision] = useState<"accepted" | "declined" | null>(null);
   const [selectedProposalIds, setSelectedProposalIds] = useState<string[]>([]);
   const [proposalQuantities, setProposalQuantities] = useState<Record<string, number>>({});
+  const activeUserId = useRef<string | null>(null);
+  const memoryRefreshTimer = useRef<number | null>(null);
+
+  const clearUserScopedState = useCallback(() => {
+    if (memoryRefreshTimer.current !== null) {
+      window.clearTimeout(memoryRefreshTimer.current);
+      memoryRefreshTimer.current = null;
+    }
+    if (voiceRecognition.current) {
+      voiceRecognition.current.stop();
+      voiceRecognition.current = null;
+    }
+    rolloverStarted.current = false;
+    setWorkspace(null);
+    setWorkspaceError("");
+    setProducts([]);
+    setLoadingProducts(false);
+    setProductError("");
+    setCart(null);
+    setCartError("");
+    setCartOpen(false);
+    setJourney(null);
+    setJourneyError("");
+    setJourneyNotice("");
+    setMutating(false);
+    setOrdersOpen(false);
+    setOrders([]);
+    setOrdersLoading(false);
+    setOrdersError("");
+    setNotifications({ unread: 0, items: [] });
+    setNotificationsOpen(false);
+    setQuery("");
+    setCategory("All");
+    setAssistantOpen(false);
+    setAssistantQuery("");
+    setAssistantResult(null);
+    setAssistantError("");
+    setAsking(false);
+    setListening(false);
+    setMemory(null);
+    setMemoryLoading(false);
+    setMemoryError("");
+    setPreference("");
+    setMemoryBusy(false);
+    setMemoryNotice("");
+    setDecision(null);
+    setSelectedProposalIds([]);
+    setProposalQuantities({});
+    setPassword("");
+  }, []);
 
   const backend = useCallback(async (path: string, init?: RequestInit) => {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -169,17 +221,26 @@ export function Storefront() {
       return;
     }
 
+    const applySession = (nextSession: Session | null) => {
+      const nextUserId = nextSession?.user.id ?? null;
+      if (activeUserId.current !== nextUserId) {
+        activeUserId.current = nextUserId;
+        clearUserScopedState();
+      }
+      setSession(nextSession);
+    };
+
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      applySession(data.session);
       setAuthReady(true);
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
+      applySession(nextSession);
     });
 
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [clearUserScopedState]);
 
   useEffect(() => {
     if (!session) return;
@@ -376,6 +437,8 @@ export function Storefront() {
   async function askAssistant(event: FormEvent) {
     event.preventDefault();
     if (!assistantQuery.trim()) return;
+    const requestUserId = session?.user.id;
+    if (!requestUserId) return;
 
     setAsking(true);
     setAssistantError("");
@@ -394,19 +457,46 @@ export function Storefront() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The assistant is unavailable.");
+      if (activeUserId.current !== requestUserId) return;
       setAssistantResult(data as AssistantResponse);
       const items = (data as AssistantResponse).proposal?.items ?? [];
       setSelectedProposalIds(items.length === 1 ? [items[0].productId] : []);
       setProposalQuantities(Object.fromEntries(items.map((item) => [item.productId, item.quantity])));
     } catch (error) {
-      setAssistantError(error instanceof Error ? error.message : "The assistant is unavailable.");
+      if (activeUserId.current === requestUserId) {
+        setAssistantError(error instanceof Error ? error.message : "The assistant is unavailable.");
+      }
     } finally {
-      setAsking(false);
+      if (activeUserId.current === requestUserId) setAsking(false);
     }
   }
 
   async function refreshMemory() {
-    try { setMemory(await backend("/api/memory") as MemoryStatus); } catch { setMemory(null); }
+    const requestUserId = session?.user.id;
+    if (!requestUserId) return;
+    setMemoryLoading(true);
+    setMemoryError("");
+    try {
+      const value = await backend("/api/memory") as MemoryStatus;
+      if (activeUserId.current === requestUserId) setMemory(value);
+    } catch (error) {
+      if (activeUserId.current === requestUserId) {
+        setMemory(null);
+        setMemoryError(error instanceof Error ? error.message : "Preference memory is unavailable.");
+      }
+    } finally {
+      if (activeUserId.current === requestUserId) setMemoryLoading(false);
+    }
+  }
+
+  function scheduleMemoryRefresh() {
+    const requestUserId = session?.user.id;
+    if (!requestUserId) return;
+    if (memoryRefreshTimer.current !== null) window.clearTimeout(memoryRefreshTimer.current);
+    memoryRefreshTimer.current = window.setTimeout(() => {
+      memoryRefreshTimer.current = null;
+      if (activeUserId.current === requestUserId) void refreshMemory();
+    }, 2500);
   }
 
   async function toggleMemory(enabled: boolean) {
@@ -425,7 +515,7 @@ export function Storefront() {
     try {
       await backend("/api/memory/preferences", { method: "POST", body: JSON.stringify({ preference: preference.trim() }) });
       setPreference(""); setMemoryNotice("Preference accepted. It may take a few seconds to appear.");
-      window.setTimeout(() => void refreshMemory(), 2500);
+      scheduleMemoryRefresh();
     } catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be saved."); }
     finally { setMemoryBusy(false); }
   }
@@ -436,7 +526,7 @@ export function Storefront() {
       await backend(`/api/memory/preferences/${id}`, { method: "DELETE" });
       setMemory((current) => current ? { ...current, memories: current.memories.filter((item) => item.id !== id) } : current);
       setMemoryNotice("Preference forgotten.");
-      window.setTimeout(() => void refreshMemory(), 2500);
+      scheduleMemoryRefresh();
     }
     catch (error) { setMemoryNotice(error instanceof Error ? error.message : "Preference could not be deleted."); }
     finally { setMemoryBusy(false); }
@@ -678,8 +768,11 @@ export function Storefront() {
             <div className="drawer-head"><div><p className="eyebrow">Gemini + Pinecone</p><h2>Shopping assistant</h2></div><button onClick={() => setAssistantOpen(false)} aria-label="Close">×</button></div>
             <p className="assistant-intro">Ask naturally. I can understand regional product names and prepare a proposal for you to approve.</p>
             <section className="memory-panel">
-              <div><strong>Personal preferences (Mem0)</strong><label><input type="checkbox" checked={memory?.consent ?? false} disabled={memoryBusy || !memory?.configured} onChange={(event) => void toggleMemory(event.target.checked)} /> Remember mine</label></div>
-              {!memory?.configured && <p>Memory is not enabled on the server yet.</p>}
+              <div><strong>Personal preferences (Mem0)</strong><label><input type="checkbox" checked={memory?.consent ?? false} disabled={memoryBusy || memoryLoading || !memory?.configured} onChange={(event) => void toggleMemory(event.target.checked)} /> Remember mine</label></div>
+              {memoryLoading && <p>Loading preference memory…</p>}
+              {!memoryLoading && memory && !memory.configured && <p>Memory is not enabled on the server yet.</p>}
+              {!memoryLoading && memoryError && <p className="error-banner" role="alert">Preference memory could not be loaded: {memoryError}</p>}
+              {!memoryLoading && memory?.error && <p className="error-banner" role="alert">Preference memory could not be loaded: {memory.error}</p>}
               {memory?.consent && <>
                 <div className="memory-add"><input value={preference} maxLength={240} onChange={(event) => setPreference(event.target.value)} placeholder="e.g. I prefer vegan milk" /><button type="button" disabled={memoryBusy || preference.trim().length < 3} onClick={() => void savePreference()}>Remember</button></div>
                 {!!memory.memories.length && <ul>{memory.memories.map((item) => <li key={item.id}><span>{item.memory}</span><button type="button" disabled={memoryBusy} onClick={() => void deletePreference(item.id)}>{memoryBusy ? "Working…" : "Forget"}</button></li>)}</ul>}

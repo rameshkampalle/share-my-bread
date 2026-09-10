@@ -65,7 +65,7 @@ export function CartDrawer({ cart, journey, busy, error, notice, onClose, onQuan
           </div>
         </section>
 
-        {journey?.authorization && (
+        {journey?.order && (
           <section className="drawer-section cost-card">
             <div className="section-title"><h3>Deterministic allocation</h3><span className="status-chip">{obligationStatus?.replaceAll("_", " ")}</span></div>
             <p>Only authorized members are included. Each member pays for their own frozen lines at the stored unit price.</p>
