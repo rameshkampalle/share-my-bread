@@ -1,10 +1,11 @@
 import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 from app.adapters.elevenlabs import ElevenLabsVoice, VoiceUnavailable
 from app.api.voice import router, voice_user, _requests
@@ -104,6 +105,43 @@ class RouteTests(unittest.TestCase):
         with patch('app.api.voice.ElevenLabsVoice') as provider:
             self.assertEqual(self.client.post('/api/voice/speak', json={'text': 'hello'}).status_code, 403)
             provider.assert_not_called()
+
+    def test_real_voice_authorization_reads_named_profile_fields(self):
+        # Exercise the actual dependency and access check, including the cursor's
+        # production default (tuple rows). Only the database/provider are faked.
+        self.app.dependency_overrides[get_current_user] = lambda: self.user
+        for role, status, expected in [('MEMBER', 'ACTIVE', 200),
+                                        ('ADMIN', 'ACTIVE', 200),
+                                        ('MEMBER', 'INACTIVE', 403),
+                                        ('DELIVERY', 'ACTIVE', 403)]:
+            for path, payload in [('transcribe', {'content': b'audio', 'headers': {'content-type': 'audio/webm'}}),
+                                  ('speak', {'json': {'text': 'hello'}})]:
+                with self.subTest(role=role, status=status, path=path):
+                    _requests.clear()
+                    profile = {'id': self.user.id, 'display_name': 'Member',
+                               'app_role': role, 'status': status}
+                    cursor = AsyncMock()
+                    cursor.__aenter__.return_value = cursor
+                    connection = AsyncMock()
+                    connection.__aenter__.return_value = connection
+
+                    def make_cursor(*, row_factory=None):
+                        cursor.fetchone.return_value = (profile if row_factory is dict_row
+                                                        else tuple(profile.values()))
+                        return cursor
+
+                    connection.cursor = MagicMock(side_effect=make_cursor)
+                    service = AsyncMock()
+                    service.transcribe.return_value = 'hello'
+                    service.speak.return_value = b'audio'
+                    with patch('app.api.voice.connect_database', new=AsyncMock(return_value=connection)), \
+                         patch('app.api.voice.ElevenLabsVoice', return_value=service) as provider:
+                        response = self.client.post('/api/voice/' + path, **payload)
+                    self.assertEqual(response.status_code, expected)
+                    if expected == 403:
+                        provider.assert_not_called()
+                    else:
+                        getattr(service, path).assert_awaited_once()
 
     def test_transcript_does_not_mutate_and_requires_review(self):
         self.authorize()

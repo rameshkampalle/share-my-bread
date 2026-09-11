@@ -5,6 +5,7 @@ from collections import OrderedDict
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
+from psycopg.rows import dict_row
 
 from app.adapters.elevenlabs import ElevenLabsVoice, VoiceUnavailable
 from app.api.cart import connect_database
@@ -20,7 +21,7 @@ _requests: OrderedDict[str, tuple[float, int]] = OrderedDict()
 
 async def voice_user(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     async with await connect_database() as connection:
-        async with connection.cursor() as cursor:
+        async with connection.cursor(row_factory=dict_row) as cursor:
             await require_shopper(cursor, user.id)
     return user
 
