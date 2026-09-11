@@ -158,3 +158,10 @@ input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px r
   .product-grid { grid-template-columns: 1fr; }.product-card { min-height: 255px; grid-template-columns: 88px 1fr; }.category-tabs { margin-right: -1rem; }.assistant-drawer,.cart-drawer { padding: 1.2rem; }.journey-steps { grid-template-columns: repeat(3,1fr); gap: .8rem 0; }.journey-steps li:nth-child(4)::before { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; animation-duration: .01ms !important; } }
+
+.voice-controls { padding: .8rem 0; }
+.voice-controls p,.read-aloud p { font-size: .85rem; line-height: 1.5; margin: .6rem 0; }
+.voice-controls small { color: #536574; line-height: 1.5; display: block; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.read-aloud { margin: .6rem 0; }
+.voice-controls button:focus-visible,.read-aloud button:focus-visible { outline: 3px solid #355cfa; outline-offset: 3px; }

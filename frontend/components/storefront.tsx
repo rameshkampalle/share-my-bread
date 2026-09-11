@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
+import { VoiceInput, ReadAloud } from "@/components/voice-controls";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { AssistantResponse, Cart, InventoryRow, Journey, MemoryStatus, NotificationFeed, OrderHistoryItem, Product, Workspace } from "@/lib/types";
@@ -11,17 +12,6 @@ const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
   currency: "EUR",
 });
-
-type BrowserSpeechRecognition = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: (event: { results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }> }) => void;
-  onerror: () => void;
-  onend: () => void;
-  start: () => void;
-  stop: () => void;
-};
 
 function inventoryFor(product: Product): InventoryRow | null {
   if (Array.isArray(product.inventory)) return product.inventory[0] ?? null;
@@ -78,8 +68,7 @@ export function Storefront() {
   const [assistantResult, setAssistantResult] = useState<AssistantResponse | null>(null);
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
-  const [listening, setListening] = useState(false);
-  const voiceRecognition = useRef<BrowserSpeechRecognition | null>(null);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [memory, setMemory] = useState<MemoryStatus | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
@@ -92,10 +81,6 @@ export function Storefront() {
   const activeUserId = useRef<string | null>(null);
 
   const clearUserScopedState = useCallback(() => {
-    if (voiceRecognition.current) {
-      voiceRecognition.current.stop();
-      voiceRecognition.current = null;
-    }
     rolloverStarted.current = false;
     setWorkspace(null);
     setWorkspaceError("");
@@ -122,7 +107,7 @@ export function Storefront() {
     setAssistantResult(null);
     setAssistantError("");
     setAsking(false);
-    setListening(false);
+    setVoiceBusy(false);
     setMemory(null);
     setMemoryLoading(false);
     setMemoryError("");
@@ -431,7 +416,7 @@ export function Storefront() {
 
   async function askAssistant(event: FormEvent) {
     event.preventDefault();
-    if (!assistantQuery.trim()) return;
+    if (voiceBusy || asking || !assistantQuery.trim()) return;
     const requestUserId = session?.user.id;
     if (!requestUserId) return;
 
@@ -581,36 +566,6 @@ export function Storefront() {
     setDecision(null);
   }
 
-  function startVoiceInput() {
-    if (listening && voiceRecognition.current) {
-      voiceRecognition.current.stop();
-      return;
-    }
-    const browserWindow = window as unknown as {
-      SpeechRecognition?: new () => BrowserSpeechRecognition;
-      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
-    };
-    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setAssistantError("Voice input is not supported by this browser. You can still type the request.");
-      return;
-    }
-    setAssistantError("");
-    setListening(true);
-    const recognition = new Recognition();
-    voiceRecognition.current = recognition;
-    recognition.lang = navigator.language || "en-GB";
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
-      if (transcript) setAssistantQuery(transcript);
-    };
-    recognition.onerror = () => setAssistantError("Voice input could not be captured. Please try again or type the request.");
-    recognition.onend = () => { voiceRecognition.current = null; setListening(false); };
-    recognition.start();
-  }
-
   if (!authReady) {
     return <main className="center-stage"><div className="loader" aria-label="Loading" /></main>;
   }
@@ -675,7 +630,7 @@ export function Storefront() {
       {notificationsOpen && <aside className="notification-panel" aria-label="Notifications">
         <div><h2>Notifications</h2><button disabled={!notifications.unread} onClick={() => void readAllNotifications()}>Mark all read</button></div>
         {!notifications.items.length && <p>No notifications yet.</p>}
-        {notifications.items.map((item) => <article key={item.id} className={item.read_at ? "read" : "unread"}><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.created_at).toLocaleString()}</small></article>)}
+        {notifications.items.map((item) => <article key={item.id} className={item.read_at ? "read" : "unread"}><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.created_at).toLocaleString()}</small><ReadAloud key={`${session.user.id}:${item.id}`} userId={session.user.id} text={`${item.title}. ${item.message}`} /></article>)}
       </aside>}
 
       <section className="intro" id="top">
@@ -753,9 +708,9 @@ export function Storefront() {
       {ordersOpen && <OrdersDrawer orders={orders} loading={ordersLoading} busy={mutating} error={ordersError} isAdmin={workspace.profile.app_role === "ADMIN"} onClose={() => setOrdersOpen(false)} onAction={historyAction} />}
 
       {assistantOpen && (
-        <div className="drawer-backdrop" onMouseDown={() => setAssistantOpen(false)}>
+        <div className="drawer-backdrop" onMouseDown={() => { setAssistantOpen(false); setVoiceBusy(false); }}>
           <aside className="assistant-drawer" aria-label="AI shopping assistant" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="drawer-head"><div><p className="eyebrow">Gemini + Pinecone</p><h2>Shopping assistant</h2></div><button onClick={() => setAssistantOpen(false)} aria-label="Close">×</button></div>
+            <div className="drawer-head"><div><p className="eyebrow">Gemini + Pinecone</p><h2>Shopping assistant</h2></div><button onClick={() => { setAssistantOpen(false); setVoiceBusy(false); }} aria-label="Close">×</button></div>
             <p className="assistant-intro">Ask naturally. I can understand regional product names and prepare a proposal for you to approve.</p>
             <section className="memory-panel">
               <div><strong>Personal preferences (Mem0)</strong><label><input type="checkbox" checked={memory?.consent ?? false} disabled={memoryBusy || memoryLoading || !memory?.configured} onChange={(event) => void toggleMemory(event.target.checked)} /> Remember mine</label></div>
@@ -774,15 +729,15 @@ export function Storefront() {
               {["Add two tubs of curd for raita", "Find a vegan milk for coffee", "What can I use for rajma?"].map((item) => <button key={item} onClick={() => setAssistantQuery(item)}>{item}</button>)}
             </div>
             <form className="assistant-form" onSubmit={askAssistant}>
-              <textarea value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
-              <button className="voice-button" type="button" disabled={asking} onClick={startVoiceInput}>{listening ? "■ Stop listening" : "🎙 Speak request"}</button>
-              <button className="primary-button" disabled={asking}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
+              <textarea aria-label="Grocery request or voice transcript" disabled={voiceBusy} value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
+              <VoiceInput key={session.user.id} userId={session.user.id} disabled={asking} onTranscript={setAssistantQuery} onBusy={setVoiceBusy} />
+              <button className="primary-button" disabled={asking || voiceBusy}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
             </form>
             {assistantError && <p className="error-banner" role="alert">{assistantError}</p>}
             {assistantResult && (
               <div className="assistant-response">
                 <span className="response-type">{(assistantResult.responseType ?? "ASSISTANT_RESPONSE").replaceAll("_", " ")}</span>
-                <p>{assistantResult.message}</p>
+                <p>{assistantResult.message}</p><ReadAloud key={`${session.user.id}:${assistantResult.correlationId}:${assistantResult.message}`} userId={session.user.id} text={assistantResult.message} />
                 {!!assistantResult.candidates?.length && <div className="candidate-options"><p>{assistantResult.proposal ? "Choose another requested product:" : "Choose one or more requested products:"}</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>Add to proposal →</span></button>)}</div>}
                 {assistantResult.proposal?.items && <div className="proposal-items"><p>{assistantResult.proposal.items.length > 1 ? "Select one or more items:" : "Proposed item:"}</p>{assistantResult.proposal.items.map((item) => {
                   const quantity = proposalQuantities[item.productId] ?? item.quantity;
