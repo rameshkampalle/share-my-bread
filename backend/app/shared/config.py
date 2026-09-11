@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     n8n_webhook_secret: str | None = Field(default=None, repr=False)
     mem0_api_key: str | None = Field(default=None, repr=False)
     mem0_enabled: bool = False
+    elevenlabs_enabled: bool = False
+    elevenlabs_api_key: str | None = Field(default=None, repr=False)
+    elevenlabs_voice_id: str = Field(default="", pattern=r"^[A-Za-z0-9_-]*$")
+    elevenlabs_stt_model_id: str = "scribe_v2"
+    elevenlabs_tts_model_id: str = "eleven_multilingual_v2"
     ai_assistant_enabled: bool = True
     semantic_search_enabled: bool = True
     dev_fulfilment_mode: bool = True

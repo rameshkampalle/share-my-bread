@@ -26,3 +26,6 @@ Thumbs.db
 
 # Temporary evaluation output
 evals/results/*.tmp.json
+
+# TypeScript incremental build cache
+*.tsbuildinfo
