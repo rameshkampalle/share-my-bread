@@ -1,11 +1,13 @@
 """Server-to-server checks. This secret is never sent to the browser or n8n."""
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Literal
 
 from app.services.guardrails import build_checker, GuardrailUnavailable
+from app.services.catalogue_guardrails import checked_catalogue
 from app.shared.config import get_settings
 
 router = APIRouter(prefix='/api/guardrails', tags=['guardrails'])
@@ -13,7 +15,7 @@ router = APIRouter(prefix='/api/guardrails', tags=['guardrails'])
 
 class CheckRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    stage: Literal['input', 'output']
+    stage: Literal['input', 'output', 'retrieval']
     text: str = Field(min_length=1, max_length=16000)
 
     @field_validator('text')
@@ -46,3 +48,17 @@ async def check(payload: CheckRequest, response: Response, checker=Depends(get_c
         return await checker.check(payload.stage, payload.text)
     except GuardrailUnavailable:
         raise HTTPException(503, 'Safety checks are unavailable. Please try again.') from None
+
+
+class CatalogueRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    productIds: list[UUID] = Field(max_length=10)
+
+
+@router.post('/catalogue', dependencies=[Depends(require_service_secret)])
+async def catalogue(payload: CatalogueRequest, response: Response, checker=Depends(get_checker)):
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        return await checked_catalogue(payload.productIds, checker)
+    except GuardrailUnavailable:
+        raise HTTPException(503, 'Checked catalogue is unavailable.') from None

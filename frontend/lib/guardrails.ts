@@ -1,7 +1,7 @@
 /** Server-only helper. Call exclusively from the assistant route. */
 export class GuardrailUnavailable extends Error {}
 
-export async function checkRail(stage: 'input' | 'output', text: string): Promise<{ status: 'passed' | 'modified' | 'blocked'; text: string }> {
+export async function checkRail(stage: 'input' | 'output' | 'retrieval', text: string): Promise<{ status: 'passed' | 'modified' | 'blocked'; text: string }> {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   const secret = process.env.GUARDRAILS_API_SECRET;
   if (!baseUrl || !secret) throw new GuardrailUnavailable();

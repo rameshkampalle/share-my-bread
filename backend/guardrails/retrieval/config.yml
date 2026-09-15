@@ -1,0 +1,6 @@
+# Retrieval is checked as data through a dedicated check-only input engine.
+models: []
+rails:
+  input:
+    flows:
+      - self check input

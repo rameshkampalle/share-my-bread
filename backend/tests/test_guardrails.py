@@ -74,3 +74,16 @@ class EndpointTests(unittest.TestCase):
         self.checker.check.side_effect = GuardrailUnavailable()
         response = self.client.post('/api/guardrails/check', headers={'X-Guardrails-Secret': 'test-only-secret'}, json={'stage': 'input', 'text': 'Find bread'})
         self.assertEqual(response.status_code, 503)
+
+    def test_catalogue_requires_service_authentication(self):
+        with patch('app.api.guardrails.checked_catalogue', AsyncMock()) as catalogue:
+            self.assertEqual(self.client.post('/api/guardrails/catalogue', json={'productIds': []}).status_code, 401)
+        catalogue.assert_not_called()
+
+    def test_catalogue_rejects_untrusted_fields_invalid_ids_and_large_batches(self):
+        valid_id = '10000000-0000-0000-0000-000000000001'
+        for payload in [{'productIds': ['not-a-uuid']}, {'productIds': [valid_id] * 11}, {'productIds': [], 'price': 0}]:
+            with patch('app.api.guardrails.checked_catalogue', AsyncMock()) as catalogue:
+                response = self.client.post('/api/guardrails/catalogue', headers={'X-Guardrails-Secret': 'test-only-secret'}, json=payload)
+            self.assertEqual(response.status_code, 422)
+            catalogue.assert_not_called()

@@ -47,6 +47,10 @@ remains available. Never fall back silently to an unguarded AI response.
 
 ## Increment 3: input and retrieval rails
 
+Implemented locally; uncommitted for review. See
+[implementation and testing notes](NEMO_INCREMENT_3.md). Live workflow and
+provider verification remains pending deployment configuration.
+
 - Detect override, secret-disclosure, and confirmation-bypass requests.
 - Mask unnecessary sensitive data before model calls; allow legitimate dietary
   questions and authorized pickup information.

@@ -28,3 +28,15 @@ class NeMoRuntimeTests(unittest.IsolatedAsyncioTestCase):
         from langchain_google_genai import ChatGoogleGenerativeAI
         judge = ChatGoogleGenerativeAI(model='gemini-3.1-flash-lite', google_api_key='test-placeholder', temperature=0, max_retries=0, timeout=10)
         self.assertIsNotNone(judge)
+
+    async def test_real_retrieval_rail_blocks_unsafe_and_invalid_judgments(self):
+        from langchain_core.language_models.fake import FakeListLLM
+        from nemoguardrails import RailsConfig
+        from nemoguardrails.rails.llm.llmrails import LLMRails
+
+        judge = FakeListLLM(responses=['No', 'Yes', 'unparseable'])
+        engine = LLMRails(RailsConfig.from_path(str(CONFIG_PATH.parent / 'retrieval')), llm=judge)
+        checker = NeMoChecker(None, retrieval_engine=engine)
+        for expected in ['passed', 'blocked', 'blocked']:
+            with self.subTest(expected=expected):
+                self.assertEqual((await checker.check('retrieval', '["Prefers rye bread"]'))['status'], expected)

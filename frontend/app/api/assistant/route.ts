@@ -63,6 +63,27 @@ export async function POST(request: Request) {
     }
   }
 
+  if (guarded) {
+    try {
+      if (!Array.isArray(memoryContext) || memoryContext.length > 5 ||
+          !memoryContext.every(value => typeof value === 'string' && value.length <= 240)) {
+        throw new GuardrailUnavailable();
+      }
+      const checked = memoryContext.length
+        ? await checkRail('retrieval', JSON.stringify(memoryContext))
+        : { status: 'passed', text: '[]' };
+      const values: unknown = checked.status === 'blocked' ? [] : JSON.parse(checked.text);
+      if (!Array.isArray(values) || values.length > 5 ||
+          !values.every(value => typeof value === 'string' && value.length <= 240)) {
+        throw new GuardrailUnavailable();
+      }
+      memoryContext = values;
+    } catch {
+      // Memory is optional. Withhold it completely when its mandatory check fails.
+      memoryContext = [];
+    }
+  }
+
   const headers: HeadersInit = { "content-type": "application/json" };
   if (process.env.N8N_WEBHOOK_SECRET) {
     headers["x-smb-webhook-secret"] = process.env.N8N_WEBHOOK_SECRET;
@@ -74,7 +95,7 @@ export async function POST(request: Request) {
       headers,
       body: JSON.stringify({ ...(body as object), memoryContext }),
       cache: "no-store",
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(guarded ? 60000 : 30000),
     });
 
     const text = await response.text();
