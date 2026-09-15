@@ -12,6 +12,9 @@ function safetyUnavailable() {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if ((process.env.ASSISTANT_ENABLED ?? 'true') !== 'true') {
+    return NextResponse.json({ error: 'The assistant is temporarily disabled. Please browse the catalogue manually.' }, { status: 503 });
+  }
   const mode = process.env.ASSISTANT_GUARDRAILS_MODE ?? "guarded";
   if (!["baseline", "guarded"].includes(mode)) return safetyUnavailable();
   const guarded = mode === "guarded";

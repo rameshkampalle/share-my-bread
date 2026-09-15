@@ -8,6 +8,7 @@ const proposal = { responseType: 'CART_PROPOSAL', message: 'Please confirm two b
   proposal: { action: 'ADD_ITEMS', items: [{ productId: '22222222-2222-4222-8222-222222222222', name: 'Bread', quantity: 2 }] }, candidates: [] };
 const request = () => new Request('http://localhost/api/assistant', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: 'Find bread', data: { message: 'unchecked' } }) });
 beforeEach(() => {
+  vi.stubEnv('ASSISTANT_ENABLED', 'true');
   vi.stubEnv('ASSISTANT_GUARDRAILS_MODE', 'guarded');
   vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://backend.example');
   vi.stubEnv('GUARDRAILS_API_SECRET', 'test-secret');
@@ -20,6 +21,12 @@ beforeEach(() => {
     if (url.endsWith('/guardrails/check')) return Response.json({ status: 'passed', text: body.text });
     return Response.json(proposal);
   });
+});
+
+it.each(['false', 'invalid'])('disables all assistant calls when ASSISTANT_ENABLED is %s', async (enabled) => {
+  vi.stubEnv('ASSISTANT_ENABLED', enabled);
+  expect((await POST(request())).status).toBe(503);
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 

@@ -63,7 +63,7 @@ provider verification remains pending deployment configuration.
 
 ## Increment 4: execution and output rails
 
-Implemented locally; uncommitted for review. See
+Committed as `6e39141`. See
 [implementation and testing notes](NEMO_INCREMENT_4.md). Live workflow and
 provider verification remains pending deployment configuration.
 
@@ -77,6 +77,10 @@ provider verification remains pending deployment configuration.
   support semantic review but never authorize actions.
 
 ## Increment 5: evaluate and release gradually
+
+Evaluation capture/comparison tooling, CI checks, and an AI-disable switch are
+implemented locally. See [the evaluation and release runbook](NEMO_INCREMENT_5.md).
+Live evaluation and release acceptance remain pending; no rollout is claimed.
 
 Run the same versioned cases before and after rails, using the same model,
 catalogue, fixtures, and account scope. Inspect tool calls and state changes as

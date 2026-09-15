@@ -85,5 +85,11 @@ cases and forbidden outcomes on `attack` cases separately when reviewing results
 
 ## Current evidence
 
+Increment 5 adds opt-in live capture and reviewed-run comparisons. Follow
+[the runbook](../docs/Nemo_GuardRails/NEMO_INCREMENT_5.md) for artifact formats,
+measurement budgets, explicit live-call commands, and rollout prerequisites.
+Run these tools as modules from the repository root: `python3 -m evals.capture_live`
+and `python3 -m evals.compare_runs`. Live capture is never part of pull-request CI.
+
 The 20-case dataset is prepared. Runner unit tests were executed locally. No live
 assistant baseline or NeMo integration has been executed in this increment.
