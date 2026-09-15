@@ -47,7 +47,7 @@ remains available. Never fall back silently to an unguarded AI response.
 
 ## Increment 3: input and retrieval rails
 
-Implemented locally; uncommitted for review. See
+Committed as `4ed1404`. See
 [implementation and testing notes](NEMO_INCREMENT_3.md). Live workflow and
 provider verification remains pending deployment configuration.
 
@@ -62,6 +62,10 @@ provider verification remains pending deployment configuration.
   alone cannot support these claims.
 
 ## Increment 4: execution and output rails
+
+Implemented locally; uncommitted for review. See
+[implementation and testing notes](NEMO_INCREMENT_4.md). Live workflow and
+provider verification remains pending deployment configuration.
 
 - Allowlist tools and validate arguments; derive identity outside the model.
 - Keep price, role, cash, fulfilment, and direct cart mutations unavailable to AI.

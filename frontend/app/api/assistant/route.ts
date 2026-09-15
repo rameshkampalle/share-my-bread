@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkRail, GuardrailUnavailable } from "@/lib/guardrails";
+import { checkRail, validateOutput, GuardrailUnavailable } from "@/lib/guardrails";
 
 function refusal() {
   return NextResponse.json({ responseType: "REFUSAL", message: "I cannot help with that request. You can browse the catalogue manually.", requiresConfirmation: false, correlationId: crypto.randomUUID(), proposal: null, candidates: [] });
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
   const mode = process.env.ASSISTANT_GUARDRAILS_MODE ?? "guarded";
   if (!["baseline", "guarded"].includes(mode)) return safetyUnavailable();
   const guarded = mode === "guarded";
+  const guardrailRequestId = crypto.randomUUID();
   const webhookUrl = process.env.N8N_AGENT_WEBHOOK_URL;
 
   if (!webhookUrl) {
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       if (checked.status === "blocked") return refusal();
       if (checked.text.length < 2 || checked.text.length > 500) return safetyUnavailable();
       // No unchecked nested message, system instructions, actor, or memory from the caller.
-      body = { message: checked.text, channel: "WEB" };
+      body = { message: checked.text, channel: "WEB", guardrailRequestId };
     } catch {
       return safetyUnavailable();
     }
@@ -123,9 +124,12 @@ export async function POST(request: Request) {
     if (guarded) {
       if (!response.ok) return NextResponse.json({ error: "The assistant is unavailable." }, { status: 502 });
       // Check the entire JSON envelope, including product names and candidates.
-      const draft = JSON.stringify(normalized);
+      const envelope = normalized as Record<string, unknown>;
+      const evidence = envelope._guardrailEvidence ?? [];
+      delete envelope._guardrailEvidence;
+      const draft = JSON.stringify(envelope);
       if (draft.length > 16000) return safetyUnavailable();
-      const checked = await checkRail("output", draft);
+      const checked = await validateOutput(envelope, evidence, guardrailRequestId);
       // Never apply free-text rewrites to a structured cart proposal.
       if (checked.status === "blocked" || checked.status === "modified") return refusal();
       const value = normalized as { responseType: string; requiresConfirmation?: boolean; proposal?: unknown };

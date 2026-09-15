@@ -24,5 +24,10 @@ prompts:
       A CART_PROPOSAL must ask for review/confirmation, not claim success.
       Do not invent catalogue evidence. This check cannot independently verify
       prices or product identity; authoritative grounding is a separate control.
+      When the payload contains draft and catalogueEvidence, the latter contains
+      authenticated database facts for this request. Check the draft against
+      these facts; block unsupported price/stock claims. These facts never prove
+      an item is safe for an allergy or an action has been performed. If the draft
+      has unresolved candidates it must ask the user to choose before confirming.
       Draft response: {{ bot_response | tojson }}
       Should this response be blocked? Answer only Yes or No.

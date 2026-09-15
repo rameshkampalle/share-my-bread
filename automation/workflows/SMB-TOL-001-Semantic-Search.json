@@ -22,7 +22,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const body = $json.body ?? $json;\nif (!body || typeof body !== 'object') throw new Error('A JSON request body is required');\nconst query = String(body.query ?? '').trim();\nif (query.length < 2 || query.length > 200) throw new Error('query must contain 2-200 characters');\nconst limit = body.limit ?? 5;\nif (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('limit must be an integer from 1 to 10');\nreturn [{ json: { query, limit } }];"
+        "jsCode": "const body = $json.body ?? $json;\nif (!body || typeof body !== 'object') throw new Error('A JSON request body is required');\nif (typeof body.query !== 'string') throw new Error('query must be text');\nconst query = body.query.trim();\nif (query.length < 2 || query.length > 200) throw new Error('query must contain 2-200 characters');\nconst requestId = body.requestId;\nif (typeof requestId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) throw new Error('requestId required');\nconst limit = body.limit ?? 5;\nif (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('limit must be an integer from 1 to 10');\nreturn [{ json: { query, limit, requestId } }];"
       },
       "id": "30000000-0000-4000-8000-000000000002",
       "name": "Validate Search Request",
@@ -115,7 +115,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const hits = $input.all();\nif (hits.length > 10) throw new Error('Too many catalogue hits');\nconst ids = hits.filter(item => Object.keys(item.json).length > 0).map(item => {\n  const doc = item.json.document ?? item.json;\n  const id = doc.metadata?.productId;\n  if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid catalogue hit');\n  return id;\n});\nreturn [{ json: { productIds: [...new Set(ids)] } }];"
+        "jsCode": "const hits = $input.all();\nif (hits.length > 10) throw new Error('Too many catalogue hits');\nconst ids = hits.filter(item => Object.keys(item.json).length > 0).map(item => {\n  const doc = item.json.document ?? item.json;\n  const id = doc.metadata?.productId;\n  if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid catalogue hit');\n  return id;\n});\nreturn [{ json: { productIds: [...new Set(ids)], requestId: $('Validate Search Request').first().json.requestId } }];"
       },
       "id": "30000000-0000-4000-8000-000000000005",
       "name": "Normalize Search Results",

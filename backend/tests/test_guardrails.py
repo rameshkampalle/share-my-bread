@@ -87,3 +87,22 @@ class EndpointTests(unittest.TestCase):
                 response = self.client.post('/api/guardrails/catalogue', headers={'X-Guardrails-Secret': 'test-only-secret'}, json=payload)
             self.assertEqual(response.status_code, 422)
             catalogue.assert_not_called()
+
+    def test_output_invalid_schema_stops_before_semantic_judge(self):
+        response = self.client.post('/api/guardrails/validate-output', headers={'X-Guardrails-Secret': 'test-only-secret'},
+            json={'requestId': '10000000-0000-0000-0000-000000000001', 'response': {'responseType': 'PAY'}, 'evidence': []})
+        self.assertEqual(response.json(), {'status': 'blocked', 'text': ''})
+        self.checker.check.assert_not_called()
+
+    def test_grounded_output_reaches_semantic_judge_with_verified_facts(self):
+        from app.domain.guardrail_output import sign_evidence
+        from test_output_guardrails import proposal, REQUEST, PRODUCT
+        async def passing(stage, text):
+            import json
+            self.assertEqual(stage, 'output')
+            self.assertEqual(json.loads(text)['catalogueEvidence'], [PRODUCT])
+            return {'status': 'passed', 'text': text}
+        self.checker.check.side_effect = passing
+        response = self.client.post('/api/guardrails/validate-output', headers={'X-Guardrails-Secret': 'test-only-secret'},
+            json={'requestId': REQUEST, 'response': proposal(), 'evidence': [sign_evidence(REQUEST, [PRODUCT], 'test-only-secret')]})
+        self.assertEqual(response.json()['status'], 'passed')

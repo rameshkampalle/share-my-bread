@@ -16,6 +16,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string, options: RequestInit) => {
     const body = JSON.parse(String(options.body));
+    if (url.endsWith('/guardrails/validate-output')) return Response.json({ status: 'passed', text: JSON.stringify(body.response) });
     if (url.endsWith('/guardrails/check')) return Response.json({ status: 'passed', text: body.text });
     return Response.json(proposal);
   });
@@ -36,7 +37,8 @@ it('forwards checked input and preserves structured proposals', async () => {
   expect(sent.message).toBe('Find rye bread');
   expect(sent).not.toHaveProperty('data');
   expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('X-Guardrails-Secret');
-  expect(JSON.parse(fetchMock.mock.calls[2][1].body).text).toBe(JSON.stringify(proposal));
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body).response).toEqual(proposal);
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body).requestId).toBe(sent.guardrailRequestId);
 });
 it('withholds blocked output', async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ status: 'passed', text: 'Find bread' }))
@@ -76,9 +78,8 @@ it('withholds rewritten output rather than changing cart contents', async () => 
   fetchMock.mockResolvedValueOnce(Response.json({ status: 'passed', text: 'Find bread' }))
     .mockResolvedValueOnce(Response.json(proposal))
     .mockResolvedValueOnce(Response.json({ status: 'modified', text: '{"quantity":99}' }));
-  const result = await (await POST(request())).json();
-  expect(result.responseType).toBe('REFUSAL');
-  expect(result.proposal).toBeNull();
+  const result = await POST(request());
+  expect(result.status).toBe(503);
 });
 it('rejects a proposal that does not require confirmation', async () => {
   fetchMock.mockResolvedValueOnce(Response.json({ status: 'passed', text: 'Find bread' }))
@@ -94,6 +95,7 @@ it.each(['blocked', 'error', 'modified'])('never forwards unchecked memory after
       if (decision === 'error') throw new Error('judge unavailable');
       return Response.json({ status: decision, text: decision === 'modified' ? '["Prefers rye"]' : '' });
     }
+    if (url.endsWith('/guardrails/validate-output')) return Response.json({ status: 'passed', text: JSON.stringify(body.response) });
     if (url.endsWith('/guardrails/check')) return Response.json({ status: 'passed', text: body.text });
     return Response.json(proposal);
   });
