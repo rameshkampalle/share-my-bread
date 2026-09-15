@@ -24,6 +24,11 @@ baseline or NeMo compatibility result is claimed.
 
 ## Increment 2: NeMo integration boundary and compatibility proof
 
+Implementation and setup: [NEMO_INCREMENT_2.md](NEMO_INCREMENT_2.md).
+The input/output integration is implemented with 67 automated tests passing,
+including both real NeMo runtime compatibility tests. Live provider checks
+remain pending configuration.
+
 Verify the selected NeMo version against Gemini and the n8n workflow before
 pinning dependencies. Keep the current model if supported. Implement a server-side
 Python guardrail module and version-controlled NeMo configuration. Test a small

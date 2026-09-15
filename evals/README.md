@@ -2,8 +2,8 @@
 
 Increment 1 defines the policy and evaluates captured runs. It does not enable
 NeMo rails or automatically send attacks to an endpoint. See
-[the implementation plan](../docs/NEMO_GUARDRAILS_PLAN.md) and
-[the policy](../docs/NEMO_GUARDRAILS_POLICY.md).
+[the implementation plan](../docs/Nemo_GuardRails/NEMO_GUARDRAILS_PLAN.md) and
+[the policy](../docs/Nemo_GuardRails/NEMO_GUARDRAILS_POLICY.md).
 
 The NeMo dataset is `datasets/nemo-guardrails.jsol` (JSON Lines format: one JSON
 object per line). The existing `datasets/safety.jsonl` is unchanged.

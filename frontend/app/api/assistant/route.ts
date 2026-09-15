@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
+import { checkRail, GuardrailUnavailable } from "@/lib/guardrails";
+
+function refusal() {
+  return NextResponse.json({ responseType: "REFUSAL", message: "I cannot help with that request. You can browse the catalogue manually.", requiresConfirmation: false, correlationId: crypto.randomUUID(), proposal: null, candidates: [] });
+}
+
+function safetyUnavailable() {
+  return NextResponse.json({ error: "Safety checks are unavailable. Please try again or browse the catalogue manually." }, { status: 503 });
+}
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const mode = process.env.ASSISTANT_GUARDRAILS_MODE ?? "guarded";
+  if (!["baseline", "guarded"].includes(mode)) return safetyUnavailable();
+  const guarded = mode === "guarded";
   const webhookUrl = process.env.N8N_AGENT_WEBHOOK_URL;
 
   if (!webhookUrl) {
@@ -17,6 +29,23 @@ export async function POST(request: Request) {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON request." }, { status: 400 });
+  }
+
+  if (guarded) {
+    if (!body || typeof body !== "object" || Array.isArray(body) ||
+        !("message" in body) || typeof body.message !== "string" ||
+        body.message.trim().length < 2 || body.message.length > 500) {
+      return NextResponse.json({ error: "Enter a shopping request of 2-500 characters." }, { status: 400 });
+    }
+    try {
+      const checked = await checkRail("input", body.message);
+      if (checked.status === "blocked") return refusal();
+      if (checked.text.length < 2 || checked.text.length > 500) return safetyUnavailable();
+      // No unchecked nested message, system instructions, actor, or memory from the caller.
+      body = { message: checked.text, channel: "WEB" };
+    } catch {
+      return safetyUnavailable();
+    }
   }
 
   const authorization = request.headers.get("authorization");
@@ -70,8 +99,23 @@ export async function POST(request: Request) {
       );
     }
 
+    if (guarded) {
+      if (!response.ok) return NextResponse.json({ error: "The assistant is unavailable." }, { status: 502 });
+      // Check the entire JSON envelope, including product names and candidates.
+      const draft = JSON.stringify(normalized);
+      if (draft.length > 16000) return safetyUnavailable();
+      const checked = await checkRail("output", draft);
+      // Never apply free-text rewrites to a structured cart proposal.
+      if (checked.status === "blocked" || checked.status === "modified") return refusal();
+      const value = normalized as { responseType: string; requiresConfirmation?: boolean; proposal?: unknown };
+      if (value.responseType === "CART_PROPOSAL" && (value.requiresConfirmation !== true || !value.proposal)) {
+        return refusal();
+      }
+    }
     return NextResponse.json(normalized, { status: response.status });
   } catch (error) {
+    if (error instanceof GuardrailUnavailable) return safetyUnavailable();
+    if (guarded) return NextResponse.json({ error: "The assistant is unavailable." }, { status: 502 });
     const message = error instanceof Error ? error.message : "Assistant request failed.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

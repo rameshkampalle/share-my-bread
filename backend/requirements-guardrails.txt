@@ -1,0 +1,4 @@
+-r requirements.txt
+# Optional runtime dependencies for increment 2; install for guarded deployments.
+nemoguardrails==0.24.0
+langchain-google-genai==4.4.0
