@@ -151,4 +151,4 @@ end-to-end testing also requires the private environment values, active n8n
 workflows, and a freshly deployed Vercel preview.
 
 For increment-specific checks, see
-[Pending guardrail testing](Nemo_GuardRails/Pending_guardrails_test.md).
+[Pending guardrail testing](Pending_guardrails_test.md).
