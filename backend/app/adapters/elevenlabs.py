@@ -1,6 +1,7 @@
 """ElevenLabs boundary. No cart access, persistence, or provider-body logging."""
 import json
 import logging
+import re
 
 import httpx
 
@@ -55,8 +56,12 @@ async def provider_failure(response: httpx.Response) -> VoiceUnavailable:
     elif response.status_code == 429:
         category = "rate_limited"
         explanation = "ElevenLabs is receiving too many requests. Please try again shortly."
-    logging.getLogger(__name__).warning("ElevenLabs request rejected: http_status=%s category=%s",
-                                      response.status_code, category)
+    # Provider status is an enum-like identifier, never its free-form message.
+    safe_code = code if re.fullmatch(r"[a-z_]{1,48}", code) else "unknown"
+    if category == "provider_error":
+        explanation += f" (HTTP {response.status_code}; code: {safe_code}.)"
+    logging.getLogger(__name__).warning("ElevenLabs request rejected: http_status=%s category=%s code=%s",
+                                      response.status_code, category, safe_code)
     return VoiceUnavailable(f"{explanation} Please use text.")
 
 

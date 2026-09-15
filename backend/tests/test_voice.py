@@ -101,7 +101,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             with patch('app.adapters.elevenlabs.httpx.AsyncClient', return_value=client):
                 with self.assertRaises(VoiceUnavailable) as error:
                     await self.service().speak('hello')
-            self.assertEqual(str(error.exception), 'ElevenLabs could not process the request. Please use text.')
+            self.assertEqual(str(error.exception), 'ElevenLabs could not process the request. (HTTP 403; code: unknown.) Please use text.')
 
     async def test_disabled_provider_never_sends_audio(self):
         service = self.service()
