@@ -42,3 +42,13 @@ Run the FastAPI backend separately before testing cart confirmation. Expected af
 ## Current safety boundary
 
 The assistant searches and proposes. Only the authenticated FastAPI endpoint validates stock and writes confirmed items to the cart in one database transaction.
+
+`/api/assistant` requires a bearer session and checks `/api/workspace/me` before
+calling memory or n8n. FastAPI must be reachable and the user must have an active
+shopper profile in exactly one active group. Actor and cycle context come from
+that verified workspace, never from the request body. Verification failure stops
+the request. Deploy the backend before enabling the assistant frontend.
+
+The browser allows 50 seconds for authorization (up to 10 seconds), optional
+memory (5 seconds), and n8n (30 seconds). The n8n webhook must also validate its
+shared secret to prevent callers from bypassing the application route.

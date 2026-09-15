@@ -427,7 +427,7 @@ export function Storefront() {
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(50000),
         headers: { "content-type": "application/json", authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({
           message: assistantQuery.trim(),
