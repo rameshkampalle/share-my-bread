@@ -66,6 +66,43 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(VoiceUnavailable):
                     await self.service().transcribe(b'audio', 'audio/webm')
 
+    async def test_provider_errors_identify_action_without_exposing_content(self):
+        cases = [
+            (400, 'invalid_request', 'Zero retention requires enterprise', 'zero-retention'),
+            (401, 'quota_exceeded', 'secret-credit-details', 'usage limit'),
+            (401, 'missing_permissions', 'secret-key-details', 'missing permission'),
+            (401, 'invalid_api_key', 'secret-key-details', 'API key'),
+            (404, 'voice_not_found', 'secret-voice-details', 'voice is unavailable'),
+            (401, 'detected_unusual_activity', 'secret-account-details', 'restricted'),
+            (429, 'unknown', 'secret-body', 'too many requests'),
+        ]
+        for status, code, message, expected in cases:
+            with self.subTest(code=code):
+                calls = []
+                def handler(request):
+                    calls.append(request)
+                    return httpx.Response(status, json={'detail': {'status': code, 'message': message}})
+                client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+                with patch('app.adapters.elevenlabs.httpx.AsyncClient', return_value=client), \
+                     self.assertLogs('app.adapters.elevenlabs', level='WARNING') as logs:
+                    with self.assertRaises(VoiceUnavailable) as error:
+                        await self.service().speak('private spoken text')
+                self.assertIn(expected, str(error.exception))
+                self.assertNotIn('secret-', str(error.exception) + str(logs.output))
+                self.assertNotIn('private spoken text', str(logs.output))
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0].url.params['enable_logging'], 'false')
+
+    async def test_malformed_and_oversized_error_bodies_are_safe(self):
+        for body in [b'not json secret-content', b'x' * 16_385,
+                     b'{"detail":{"status":[],"message":{}}}', b'[]']:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda request: httpx.Response(403, content=body)))
+            with patch('app.adapters.elevenlabs.httpx.AsyncClient', return_value=client):
+                with self.assertRaises(VoiceUnavailable) as error:
+                    await self.service().speak('hello')
+            self.assertEqual(str(error.exception), 'ElevenLabs could not process the request. Please use text.')
+
     async def test_disabled_provider_never_sends_audio(self):
         service = self.service()
         service.enabled = False
