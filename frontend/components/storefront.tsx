@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
+import { withCatalogueRecommendations } from "@/lib/assistant-recommendations";
 import { VoiceInput, ReadAloud } from "@/components/voice-controls";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -438,7 +439,7 @@ export function Storefront() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The assistant is unavailable.");
       if (activeUserId.current !== requestUserId) return;
-      setAssistantResult(data as AssistantResponse);
+      setAssistantResult(withCatalogueRecommendations(data as AssistantResponse, products));
       const items = (data as AssistantResponse).proposal?.items ?? [];
       setSelectedProposalIds(items.length === 1 ? [items[0].productId] : []);
       setProposalQuantities(Object.fromEntries(items.map((item) => [item.productId, item.quantity])));
@@ -738,14 +739,14 @@ export function Storefront() {
               <div className="assistant-response">
                 <span className="response-type">{(assistantResult.responseType ?? "ASSISTANT_RESPONSE").replaceAll("_", " ")}</span>
                 <p>{assistantResult.message}</p><ReadAloud key={`${session.user.id}:${assistantResult.correlationId}:${assistantResult.message}`} userId={session.user.id} text={assistantResult.message} />
-                {!!assistantResult.candidates?.length && <div className="candidate-options"><p>{assistantResult.proposal ? "Choose another requested product:" : "Choose one or more requested products:"}</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>Add to proposal →</span></button>)}</div>}
+                {!!assistantResult.candidates?.length && <div className="candidate-options"><p>{assistantResult.proposal ? "Choose another requested product:" : "Select an available item below to prepare a proposal. Nothing is added until you confirm."}</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} disabled={maximumAddable(candidate.productId) < (candidate.quantity ?? 1)} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>{maximumAddable(candidate.productId) < (candidate.quantity ?? 1) ? "Unavailable in current stock" : "Select, then confirm →"}</span></button>)}</div>}
                 {assistantResult.proposal?.items && <div className="proposal-items"><p>{assistantResult.proposal.items.length > 1 ? "Select one or more items:" : "Proposed item:"}</p>{assistantResult.proposal.items.map((item) => {
                   const quantity = proposalQuantities[item.productId] ?? item.quantity;
                   const maximum = maximumAddable(item.productId);
                   const invalid = quantity > maximum;
                   return <div className="proposal-choice" key={item.productId}><label><input type="checkbox" checked={selectedProposalIds.includes(item.productId)} onChange={(event) => setSelectedProposalIds((current) => event.target.checked ? [...current, item.productId] : current.filter((id) => id !== item.productId))} /><span><strong>{quantity}×</strong> {item.name}</span></label>{invalid && <p className="stock-warning">Only {maximum} can be added to this cart. {maximum > 0 && <button onClick={() => setProposalQuantities((current) => ({ ...current, [item.productId]: maximum }))}>Use {maximum}</button>}</p>}</div>;
                 })}</div>}
-                {assistantResult.requiresConfirmation && assistantResult.proposal && !decision && (
+                {!!assistantResult.proposal?.items.length && !decision && (
                   <div className="proposal-actions">
                     <button className="primary-button" disabled={asking || !cart || !selectedProposalIds.length || assistantResult.proposal.items.some((item) => selectedProposalIds.includes(item.productId) && (proposalQuantities[item.productId] ?? item.quantity) > maximumAddable(item.productId))} onClick={confirmProposal}>{asking ? "Saving…" : "Confirm selected"}</button>
                     <button className="secondary-button" disabled={asking} onClick={() => setDecision("declined")}>Not now</button>

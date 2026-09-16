@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON request." }, { status: 400 });
   }
 
+  const started = performance.now();
   const authorization = request.headers.get("authorization");
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   let memoryContext: string[] = [];
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     try {
       const query = String((body as { message?: unknown }).message ?? "").slice(0, 500);
       const memoryResponse = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/memory/context?query=${encodeURIComponent(query)}`, {
-        headers: { authorization }, cache: "no-store", signal: AbortSignal.timeout(5000),
+        headers: { authorization }, cache: "no-store", signal: AbortSignal.timeout(2000),
       });
       if (memoryResponse.ok) memoryContext = (await memoryResponse.json()).memories ?? [];
     } catch {
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     }
   }
 
+  const memoryMs = performance.now() - started;
   const headers: HeadersInit = { "content-type": "application/json" };
   if (process.env.N8N_WEBHOOK_SECRET) {
     headers["x-smb-webhook-secret"] = process.env.N8N_WEBHOOK_SECRET;
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(normalized, { status: response.status });
+    return NextResponse.json(normalized, { status: response.status, headers: { "Server-Timing": `memory;dur=${memoryMs.toFixed(0)},assistant;dur=${(performance.now() - started - memoryMs).toFixed(0)}` } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Assistant request failed.";
     return NextResponse.json({ error: message }, { status: 502 });
