@@ -1,0 +1,9 @@
+# The Gemini judge is injected by build_checker. n8n remains the shopping agent.
+models: []
+rails:
+  input:
+    flows:
+      - self check input
+  output:
+    flows:
+      - self check output

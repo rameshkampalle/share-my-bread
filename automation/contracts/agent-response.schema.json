@@ -1,53 +1,158 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://share-my-bread.example/schemas/agent-response.schema.json",
-  "title": "Share My Bread Agent Response",
-  "type": "object",
+  "$defs": {
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "productId": {
+          "title": "Productid",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "quantity": {
+          "maximum": 99,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "similarityScore": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Similarityscore"
+        }
+      },
+      "required": [
+        "productId",
+        "name",
+        "quantity"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "Item": {
+      "additionalProperties": false,
+      "properties": {
+        "productId": {
+          "title": "Productid",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "quantity": {
+          "maximum": 99,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "productId",
+        "name",
+        "quantity"
+      ],
+      "title": "Item",
+      "type": "object"
+    },
+    "Proposal": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "ADD_ITEMS",
+          "title": "Action",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "items"
+      ],
+      "title": "Proposal",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
-  "required": ["responseType", "message", "requiresConfirmation", "correlationId"],
   "properties": {
     "responseType": {
-      "type": "string",
-      "enum": ["ANSWER", "CLARIFICATION", "CART_PROPOSAL", "NO_MATCH", "REFUSAL", "ERROR"]
+      "enum": [
+        "ANSWER",
+        "CLARIFICATION",
+        "CART_PROPOSAL",
+        "NO_MATCH",
+        "REFUSAL",
+        "ERROR"
+      ],
+      "title": "Responsetype",
+      "type": "string"
     },
-    "message": { "type": "string", "minLength": 1, "maxLength": 800 },
-    "requiresConfirmation": { "type": "boolean" },
-    "correlationId": { "type": "string", "format": "uuid" },
+    "message": {
+      "maxLength": 800,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "requiresConfirmation": {
+      "title": "Requiresconfirmation",
+      "type": "boolean"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
     "proposal": {
-      "type": ["object", "null"],
-      "additionalProperties": false,
-      "required": ["action", "items"],
-      "properties": {
-        "action": { "const": "ADD_ITEMS" },
-        "items": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 20,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["productId", "name", "quantity"],
-            "properties": {
-              "productId": { "type": "string", "format": "uuid" },
-              "name": { "type": "string", "minLength": 1 },
-              "quantity": { "type": "integer", "minimum": 1, "maximum": 99 }
-            }
-          }
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Proposal"
+        },
+        {
+          "type": "null"
         }
-      }
+      ]
     },
     "candidates": {
-      "type": "array",
-      "maxItems": 5,
       "items": {
-        "type": "object",
-        "required": ["productId", "name"],
-        "properties": {
-          "productId": { "type": "string", "format": "uuid" },
-          "name": { "type": "string" },
-          "similarityScore": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
-        }
-      }
+        "$ref": "#/$defs/Candidate"
+      },
+      "maxItems": 12,
+      "title": "Candidates",
+      "type": "array"
     }
-  }
+  },
+  "required": [
+    "responseType",
+    "message",
+    "requiresConfirmation",
+    "correlationId",
+    "proposal",
+    "candidates"
+  ],
+  "title": "AssistantResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://share-my-bread.example/schemas/agent-response.schema.json"
 }

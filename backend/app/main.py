@@ -14,6 +14,7 @@ from app.api.notifications import router as notifications_router
 from app.api.operations import router as operations_router
 from app.api.memory import router as memory_router
 from app.api.voice import router as voice_router
+from app.api.guardrails import router as guardrails_router
 
 settings = get_settings()
 logger = logging.getLogger("share_my_bread")
@@ -25,6 +26,7 @@ app.include_router(notifications_router)
 app.include_router(operations_router)
 app.include_router(memory_router)
 app.include_router(voice_router)
+app.include_router(guardrails_router)
 
 if settings.allowed_origins:
     app.add_middleware(
