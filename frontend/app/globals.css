@@ -165,3 +165,8 @@ input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px r
 .voice-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .read-aloud { margin: .6rem 0; }
 .voice-controls button:focus-visible,.read-aloud button:focus-visible { outline: 3px solid #355cfa; outline-offset: 3px; }
+
+/* Playback appears on light reply and notification cards. */
+.read-aloud .voice-button { color: #fff; background: #2449d8; border-color: #2449d8; }
+.read-aloud .voice-button:hover:not(:disabled) { background: #1937ac; border-color: #1937ac; }
+.assistant-form .voice-controls small { color: #b8cbd7; }
