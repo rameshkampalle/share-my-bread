@@ -16,3 +16,9 @@ it("preserves structured quantities and proposals", () => {
  const structured = {...answer, candidates: [{ productId: "bean-id", name: "Kidney Beans", quantity: 3 }]};
  expect(withCatalogueRecommendations(structured, products)).toBe(structured);
 });
+
+it("recognises an exact product ID from the current catalogue", () => {
+ const id = "10000000-0000-0000-0000-000000000020";
+ const result = withCatalogueRecommendations({...answer, message: `Use Kidney Beans (Product ID: ${id}).`}, [{...products[0], id}]);
+ expect(result.candidates?.[0].productId).toBe(id);
+});
