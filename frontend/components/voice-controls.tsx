@@ -5,7 +5,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
-export async function voiceRequest(userId: string, path: string, init: RequestInit) {
+async function voiceRequest(userId: string, path: string, init: RequestInit) {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
   const { data } = await getSupabaseBrowserClient().auth.getSession();
   if (!base || data.session?.user.id !== userId) throw new Error("Your session has changed. Please sign in again.");

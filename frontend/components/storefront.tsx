@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { CartDrawer } from "@/components/cart-drawer";
-import { LiveVoice } from "@/components/live-voice";
 import { VoiceInput, ReadAloud } from "@/components/voice-controls";
 import { OrdersDrawer } from "@/components/orders-drawer";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -70,7 +69,6 @@ export function Storefront() {
   const [assistantError, setAssistantError] = useState("");
   const [asking, setAsking] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
-  const [liveBusy, setLiveBusy] = useState(false);
   const [memory, setMemory] = useState<MemoryStatus | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
@@ -418,12 +416,7 @@ export function Storefront() {
 
   async function askAssistant(event: FormEvent) {
     event.preventDefault();
-    if (voiceBusy || liveBusy || asking) return;
-    await requestAssistant(assistantQuery);
-  }
-
-  async function requestAssistant(query: string, signal?: AbortSignal): Promise<string | undefined> {
-    if (!query.trim()) return;
+    if (voiceBusy || asking || !assistantQuery.trim()) return;
     const requestUserId = session?.user.id;
     if (!requestUserId) return;
 
@@ -434,22 +427,21 @@ export function Storefront() {
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(35000)]) : AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(35000),
         headers: { "content-type": "application/json", authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({
-          message: query.trim(),
+          message: assistantQuery.trim(),
           userId: session?.user.id,
           channel: "WEB",
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The assistant is unavailable.");
-      if (activeUserId.current !== requestUserId || signal?.aborted) return;
+      if (activeUserId.current !== requestUserId) return;
       setAssistantResult(data as AssistantResponse);
       const items = (data as AssistantResponse).proposal?.items ?? [];
       setSelectedProposalIds(items.length === 1 ? [items[0].productId] : []);
       setProposalQuantities(Object.fromEntries(items.map((item) => [item.productId, item.quantity])));
-      return (data as AssistantResponse).message;
     } catch (error) {
       if (activeUserId.current === requestUserId) {
         setAssistantError(error instanceof Error ? error.message : "The assistant is unavailable.");
@@ -736,17 +728,16 @@ export function Storefront() {
             <div className="suggestions">
               {["Add two tubs of curd for raita", "Find a vegan milk for coffee", "What can I use for rajma?"].map((item) => <button key={item} onClick={() => setAssistantQuery(item)}>{item}</button>)}
             </div>
-            <LiveVoice key={`live:${session.user.id}`} userId={session.user.id} disabled={asking || voiceBusy} onBusy={setLiveBusy} onRequest={(text, signal) => { setAssistantQuery(text); return requestAssistant(text, signal); }} />
             <form className="assistant-form" onSubmit={askAssistant}>
-              <textarea aria-label="Grocery request or voice transcript" disabled={voiceBusy || liveBusy} value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
-              <VoiceInput key={session.user.id} userId={session.user.id} disabled={asking || liveBusy} onTranscript={setAssistantQuery} onBusy={setVoiceBusy} />
-              <button className="primary-button" disabled={asking || voiceBusy || liveBusy}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
+              <textarea aria-label="Grocery request or voice transcript" disabled={voiceBusy} value={assistantQuery} onChange={(e) => setAssistantQuery(e.target.value)} placeholder="What would you like to find?" rows={4} />
+              <VoiceInput key={session.user.id} userId={session.user.id} disabled={asking} onTranscript={setAssistantQuery} onBusy={setVoiceBusy} />
+              <button className="primary-button" disabled={asking || voiceBusy}>{asking ? "Thinking…" : "Ask assistant"}<span>→</span></button>
             </form>
             {assistantError && <p className="error-banner" role="alert">{assistantError}</p>}
             {assistantResult && (
               <div className="assistant-response">
                 <span className="response-type">{(assistantResult.responseType ?? "ASSISTANT_RESPONSE").replaceAll("_", " ")}</span>
-                <p>{assistantResult.message}</p>{!liveBusy && <ReadAloud key={`${session.user.id}:${assistantResult.correlationId}:${assistantResult.message}`} userId={session.user.id} text={assistantResult.message} />}
+                <p>{assistantResult.message}</p><ReadAloud key={`${session.user.id}:${assistantResult.correlationId}:${assistantResult.message}`} userId={session.user.id} text={assistantResult.message} />
                 {!!assistantResult.candidates?.length && <div className="candidate-options"><p>{assistantResult.proposal ? "Choose another requested product:" : "Choose one or more requested products:"}</p>{assistantResult.candidates.map((candidate) => <button key={candidate.productId} onClick={() => chooseCandidate(candidate.productId, candidate.name, candidate.quantity ?? 1)}>{candidate.quantity ?? 1}× {candidate.name}<span>Add to proposal →</span></button>)}</div>}
                 {assistantResult.proposal?.items && <div className="proposal-items"><p>{assistantResult.proposal.items.length > 1 ? "Select one or more items:" : "Proposed item:"}</p>{assistantResult.proposal.items.map((item) => {
                   const quantity = proposalQuantities[item.productId] ?? item.quantity;
