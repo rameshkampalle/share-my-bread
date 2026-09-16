@@ -1,0 +1,52 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { LiveVoice } from "@/components/live-voice";
+vi.mock("@/components/voice-controls", () => ({ voiceRequest: vi.fn() }));
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it("stops a late microphone grant after the user ends the session without sending a request", async () => {
+  let grant!: (media: unknown) => void;
+  const stop = vi.fn(); const ask = vi.fn(); const busy = vi.fn();
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: () => new Promise(resolve => { grant = resolve; }) } });
+  vi.stubGlobal("MediaRecorder", class {});
+  render(<LiveVoice userId="u" disabled={false} onBusy={busy} onRequest={ask} />);
+  fireEvent.click(screen.getByText("Start live voice"));
+  fireEvent.click(screen.getByText("End live voice"));
+  await act(async () => grant({ getTracks: () => [{ stop }] }));
+  expect(stop).toHaveBeenCalledOnce(); expect(ask).not.toHaveBeenCalled();
+  expect(busy).toHaveBeenLastCalledWith(false);
+});
+it("releases a late microphone grant when the assistant closes", async () => {
+  let grant!: (media: unknown) => void; const stop = vi.fn();
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: () => new Promise(resolve => { grant = resolve; }) } });
+  vi.stubGlobal("MediaRecorder", class {});
+  const view = render(<LiveVoice userId="u" disabled={false} onBusy={vi.fn()} onRequest={vi.fn()} />);
+  fireEvent.click(screen.getByText("Start live voice")); view.unmount();
+  await act(async () => grant({ getTracks: () => [{ stop }] }));
+  expect(stop).toHaveBeenCalledOnce();
+});
+
+it("sends a paused utterance, plays the reply, and resumes listening", async () => {
+  vi.useFakeTimers();
+  const { voiceRequest } = await import("@/components/voice-controls");
+  vi.mocked(voiceRequest).mockReset();
+  vi.mocked(voiceRequest).mockResolvedValueOnce({ json: async () => ({ transcript: "Find milk" }) } as Response).mockResolvedValueOnce({ blob: async () => new Blob(["audio"]) } as Response);
+  const track = { enabled: true, stop: vi.fn() }; let level = 0.1;
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } });
+  vi.stubGlobal("AudioContext", class { resume = async () => {}; close = async () => {}; createMediaStreamSource() { return { connect() {} }; } createAnalyser() { return { fftSize: 2048, getFloatTimeDomainData(data: Float32Array) { data.fill(level); } }; } });
+  vi.stubGlobal("MediaRecorder", class { static isTypeSupported() { return true; } state = "inactive"; onstop?: () => void; ondataavailable?: (event: {data: Blob}) => void; start() { this.state = "recording"; } stop() { this.state = "inactive"; this.ondataavailable?.({data: new Blob(["speech"])}); this.onstop?.(); } });
+  let player: { onended?: () => void };
+  vi.stubGlobal("Audio", class { onended?: () => void; constructor() { player = this; } play = async () => {}; pause() {} });
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => "blob:test" });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  const ask = vi.fn().mockResolvedValue("I found milk. Please confirm on screen.");
+  const view = render(<LiveVoice userId="u" disabled={false} onBusy={vi.fn()} onRequest={ask} />);
+  await act(async () => fireEvent.click(screen.getByText("Start live voice")));
+  await act(async () => vi.advanceTimersByTimeAsync(400)); level = 0;
+  await act(async () => vi.advanceTimersByTimeAsync(1600));
+  expect(ask).toHaveBeenCalledWith("Find milk", expect.any(AbortSignal));
+  expect(track.enabled).toBe(false);
+  expect(screen.getByText("Speaking… Your microphone is paused.")).toBeTruthy();
+  await act(async () => player!.onended?.());
+  expect(track.enabled).toBe(true);
+  view.unmount(); expect(track.stop).toHaveBeenCalled(); vi.useRealTimers();
+});

@@ -89,3 +89,9 @@ No real ElevenLabs request was made during implementation: the API key is being 
 
 - https://elevenlabs.io/docs/api-reference/speech-to-text/convert
 - https://elevenlabs.io/docs/api-reference/text-to-speech/convert
+
+## Hands-free voice mode
+
+Start live voice explicitly enables automatic submission after a speech pause (about 1.4 seconds). The browser records one utterance, calls ElevenLabs transcription, submits the transcript through the existing n8n assistant, and plays the ElevenLabs reply. The microphone is disabled during processing and playback, then listening resumes. This is turn-based hands-free voice, not streaming audio or interruptible full-duplex speech; provider and n8n latency still apply.
+
+End live voice, closing the assistant, or signing out releases capture and cancels pending requests. Sessions end after five minutes, or after twenty seconds without speech. Existing size, timeout, rate, authentication and confirmation checks apply. Automatic audio blocked by a browser ends the session with a manual Listen fallback. Speech never confirms a cart mutation. Provider retention is disclosed before starting.
