@@ -115,7 +115,7 @@ export function VoiceInput({ userId, disabled, onTranscript, onBusy }: {
       {phase !== "idle" && <button className="secondary-button" type="button" onClick={() => { cancel(); setMessage("Recording cancelled. No request was sent to the assistant."); }}>Cancel</button>}
     </div>
     <p role="status">{message}</p>
-    <small>Recording sends audio to ElevenLabs for transcription. Share My Bread does not save the recording.</small>
+    <small>Recording sends audio to ElevenLabs for transcription. ElevenLabs may retain your audio and transcript. Share My Bread does not save the recording.</small>
   </div>;
 }
 

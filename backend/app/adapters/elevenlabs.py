@@ -77,13 +77,13 @@ class ElevenLabsVoice:
             raise VoiceUnavailable("Voice is unavailable. Please use text.")
         return {"xi-api-key": self.settings.elevenlabs_api_key}
 
-    async def request(self, path, *, max_bytes, **kwargs):
+    async def request(self, path, *, max_bytes, enable_logging=False, **kwargs):
         headers = self.headers()
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=5)) as client:
-                # Never silently re-enable provider retention when zero-retention is rejected.
+                # Retention is chosen explicitly per action; failures never change it.
                 async with client.stream("POST", f"{self.base_url}/{path}", headers=headers,
-                                         params={"enable_logging": "false"}, **kwargs) as response:
+                                         params={"enable_logging": str(enable_logging).lower()}, **kwargs) as response:
                     if response.status_code >= 400:
                         raise await provider_failure(response)
                     chunks = bytearray()
@@ -98,7 +98,7 @@ class ElevenLabsVoice:
     async def transcribe(self, audio: bytes, mime_type: str) -> str:
         import json
         content, _ = await self.request(
-            "speech-to-text", max_bytes=256_000,
+            "speech-to-text", max_bytes=256_000, enable_logging=True,
             files={"file": ("request.audio", audio, mime_type)},
             data={"model_id": self.settings.elevenlabs_stt_model_id,
                   "tag_audio_events": "false", "diarize": "false"},

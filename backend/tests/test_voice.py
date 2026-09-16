@@ -20,10 +20,10 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         )):
             return ElevenLabsVoice()
 
-    async def test_transcription_is_multipart_and_disables_retention(self):
+    async def test_transcription_is_multipart_and_uses_standard_retention(self):
         def handler(request):
             self.assertEqual(str(request.url).split('?')[0], 'https://api.elevenlabs.io/v1/speech-to-text')
-            self.assertEqual(request.url.params['enable_logging'], 'false')
+            self.assertEqual(request.url.params['enable_logging'], 'true')
             self.assertEqual(request.headers['xi-api-key'], 'test-secret')
             self.assertIn(b'scribe_v2', request.content)
             self.assertIn(b'example-audio', request.content)

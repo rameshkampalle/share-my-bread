@@ -39,7 +39,7 @@ ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
 
 The key needs speech-to-text and text-to-speech access. Do not put the key in Vercel public variables, JavaScript, the repository, screenshots, or logs. Keep the existing `NEXT_PUBLIC_API_BASE_URL` and CORS configuration pointing from Vercel to Render; no new frontend secret is required.
 
-All provider requests set `enable_logging=false` to honor the architecture's audio-retention requirement. ElevenLabs documents zero-retention mode as an enterprise capability. Confirm the account supports it before enabling the feature. If the provider rejects zero-retention, the integration fails back to text; it never silently retries with logging enabled. A future decision to permit provider retention needs a separate explicit consent/retention design.
+Speech-to-text explicitly uses standard ElevenLabs retention (`enable_logging=true`), approved for the demo on 16 September 2026. The recording notice discloses that ElevenLabs may retain audio and transcripts; Share My Bread does not persist recordings. Text-to-speech retains its existing `enable_logging=false` setting. Errors never silently switch retention modes. ElevenLabs zero-retention transcription requires an eligible Enterprise account.
 
 `ELEVENLABS_ENABLED=false` disables provider calls without affecting text input or the normal cart journey. Leaving `ELEVENLABS_VOICE_ID` empty permits transcription when enabled but keeps spoken playback unavailable.
 
